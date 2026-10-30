@@ -1,37 +1,52 @@
 # Relevamiento de góndola · Profarco
 
-Sitio estático (sin build) con tres pantallas:
+Tres páginas independientes, cada una con su propio enlace:
 
-- **Relevar** (celular): el promotor elige local y góndola, revisa las imágenes del **planograma de referencia** (con zoom), confirma que las entendió, cierra la referencia y recién entonces toma las fotos.
-- **Tablero**: KPIs, fotos por local, cobertura local × góndola, galería con comparación foto vs. planograma y exportación a CSV.
-- **Planogramas**: el administrador carga/borra las imágenes de referencia por local y góndola (protegido con PIN).
+| Página | Quién la usa | Qué hace |
+|---|---|---|
+| `index.html` | Relevadores | Ingresan su CI, eligen punto de venta y zona (Pestañas, Punteras, Góndola Principal, Islas / Exhibidores), ven el planograma de referencia, toman las fotos y responden las preguntas de cumplimiento. |
+| `tablero.html` | **Cliente** (es el enlace que se comparte) | Solo lectura, con clave. KPIs, % de cumplimiento, observaciones, cobertura por punto de venta y galería con la foto junto al planograma. Exporta CSV. No muestra CI ni enlaces a otras páginas. |
+| `admin.html` | Solo nosotros | Carga y borra los planogramas (con PIN). No lo compartas. |
 
-El diseño usa los tokens de +Marka (Geist, acento verde azulado, cabecera oscura).
+## Datos en Drive (carpeta PROFARCO)
+
+```
+PROFARCO/
+├─ 01_Planogramas/<punto de venta o _General>/<tipo>/   imágenes de referencia
+├─ 02_Fotos/<punto de venta>/<tipo>/<aaaa-mm-dd>/       fotos de los relevadores
+└─ 03_Maestros/
+   ├─ Relevadores        CI · Nombre completo · Activo
+   ├─ Puntos de venta    Punto de venta · Cadena · Ciudad · Activo
+   └─ Registro de fotos  una fila por foto (de acá lee el tablero)
+```
+
+- **Altas y bajas:** se editan las planillas `Relevadores` y `Puntos de venta`. Para dar de baja, escribir `NO` en la columna Activo.
+- Un planograma `_General` vale para todos los puntos de venta que no tengan uno propio de ese tipo.
+- La lista de relevadores nunca sale completa hacia la web: el formulario solo recibe el nombre que corresponde al CI ingresado.
+
+## Preguntas de cumplimiento
+
+Están en `config.js` (`CRITERIOS`). Las tres primeras son excluyentes entre sí (cumple / parcial / no cumple); el resto se combina. Se pueden cambiar los textos o agregar opciones; no cambies los `id` una vez que haya fotos.
 
 ## Probarlo ya (modo prueba)
-
-Abrir `index.html` con un servidor local (la cámara y IndexedDB necesitan `http://localhost` o `https`):
 
 ```
 python -m http.server 8080
 ```
 
-Con `APPS_SCRIPT_URL` vacío todo queda en el navegador. PIN de planogramas: `1234` (`config.js`).
+y abrir `http://localhost:8080/index.html`. Con `APPS_SCRIPT_URL` vacío todo queda en el navegador. CI de prueba `1234567`, clave del tablero `0000`, PIN de administración `1234`.
 
-## Conectar con Google Drive
+## Conectar con Drive
 
-1. En [script.google.com](https://script.google.com) crear un proyecto y pegar `apps-script/Code.gs`.
-2. *Configuración del proyecto → Propiedades del script*: agregar `TOKEN` (una clave larga al azar) y `ADMIN_PIN`.
-3. *Implementar → Nueva implementación → Aplicación web*: ejecutar como **tú**, acceso **Cualquier persona**. Copiar la URL.
-4. En `config.js` poner `APPS_SCRIPT_URL` y el mismo `TOKEN`.
-5. Publicar el sitio (GitHub Pages, que exige https y permite la cámara).
+1. En [script.google.com](https://script.google.com) crear un proyecto con la cuenta dueña de la carpeta PROFARCO y pegar `apps-script/Code.gs`.
+2. *Configuración del proyecto → Propiedades del script*: `TOKEN` (clave larga al azar), `ADMIN_PIN` (planogramas) y `TABLERO_PIN` (clave del cliente).
+3. *Implementar → Nueva implementación → Aplicación web*: ejecutar como **tú**, acceso **Cualquier persona**. Autorizar los permisos de Drive y Hojas de cálculo. Copiar la URL.
+4. En `config.js` poner `APPS_SCRIPT_URL` y el mismo `TOKEN`. Publicar con GitHub Pages (https, necesario para la cámara).
 
-Las fotos quedan en `Relevamiento de gondola/Fotos/<local>/<góndola>/` de tu Drive.
+## Qué tener en cuenta
 
-## Cosas a tener en cuenta
-
-- Las fotos se reducen a 1600 px y se guardan primero en el dispositivo; si no hay señal se suben solas al volver la conexión (el contador de la cabecera muestra las pendientes).
-- Las imágenes en Drive quedan con "cualquiera con el enlace puede ver" para poder mostrarlas en el tablero.
-- El `TOKEN` va dentro de `config.js`, que es público en un sitio estático: evita escrituras casuales pero no es un control de acceso fuerte. Para algo más estricto hace falta login real.
-- El tablero no tiene contraseña; si el sitio es público, cualquiera con el `TOKEN` puede listar las fotos.
-- Los planogramas se cachean solo como lista; las imágenes sin señal dependen de la caché del navegador.
+- Las fotos se reducen a 1600 px y se guardan primero en el dispositivo; sin señal se suben solas al volver la conexión (el contador de abajo muestra las pendientes).
+- Las imágenes quedan con "cualquiera con el enlace puede ver" para poder mostrarlas en el tablero.
+- El `TOKEN` va dentro de `config.js` (público en un sitio estático): evita usos casuales pero no es un control de acceso fuerte. La protección real del tablero es su clave (`TABLERO_PIN`); cámbiala si se filtra.
+- El tablero muestra el nombre del relevador; el CI no sale en ningún caso hacia el cliente.
+- Los planogramas sin señal dependen de la caché del navegador.
