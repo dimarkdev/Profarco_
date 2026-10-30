@@ -3,9 +3,9 @@
 window.CONFIG = {
   CLIENTE: 'Profarco',
   // URL de la aplicacion web de Apps Script (ver README.md).
-  APPS_SCRIPT_URL: '',
+  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbx13I9C4PQQbriC9w7vPv2fnyt_yYYrNL-9FI6dCTdladRBbZ5ImnoLOVDNm_pnEMHz/exec',
   // Mismo valor que la propiedad TOKEN del Apps Script.
-  TOKEN: '',
+  TOKEN: 'profarco-k7Xq29mTw4vB8nZ3',
   // Solo modo prueba: PIN de administracion. Con Drive lo valida el script (ADMIN_PIN).
   ADMIN_PIN_PRUEBA: '1234',
   // Solo modo prueba: clave de acceso al tablero del cliente (con Drive es la propiedad TABLERO_PIN).
