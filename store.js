@@ -76,7 +76,7 @@
 
   // Datos de ejemplo del modo prueba (en Drive salen de las planillas "Relevadores" y "Puntos de venta").
   const PRUEBA = {
-    relevadores: [{ ci: '1234567', nombre: 'Relevador de Prueba' }],
+    relevadores: [{ ci: '1234567', nombre: 'Relevador de Prueba' }],   // en prueba ve todos los puntos de venta
     pdvs: [{ nombre: 'Supermercado X', cadena: 'Prueba', ciudad: 'Asunción' }, { nombre: 'Supermercado Y', cadena: 'Prueba', ciudad: 'Luque' }],
   };
 
@@ -91,24 +91,17 @@
       if (!ci) throw new Error('Escribe tu número de CI');
       const NO_ENCONTRADA = 'Cédula no encontrada, verifique o reporte con soporte';
       if (REMOTO) {
-        try { return (await post({ action: 'login', ci })).nombre; }
+        try { const j = await post({ action: 'login', ci }); return { nombre: j.nombre, pdvs: j.pdvs || [] }; }
         catch (e) { throw new Error(/no registrado/i.test(e.message) ? NO_ENCONTRADA : e.message); }
       }
       const r = PRUEBA.relevadores.find((x) => x.ci === ci);
       if (!r) throw new Error(NO_ENCONTRADA);
-      return r.nombre;
+      return { nombre: r.nombre, pdvs: PRUEBA.pdvs };
     },
-    async puntosDeVenta() {
+    // Lista completa de puntos de venta: solo con la clave del tablero o de administracion (el relevador recibe unicamente los suyos al ingresar).
+    async puntosDeVenta(pin) {
       if (!REMOTO) return PRUEBA.pdvs;
-      try {
-        const j = await get('pdvs');
-        localStorage.setItem('cache-pdvs', JSON.stringify(j.pdvs));
-        return j.pdvs;
-      } catch (e) {
-        const c = localStorage.getItem('cache-pdvs'); // sin señal: ultima lista conocida
-        if (c) return JSON.parse(c);
-        throw e;
-      }
+      return (await post({ action: 'pdvs', pin })).pdvs;
     },
     // ambito 'tablero' (clave del cliente) o 'admin' (planogramas, solo nosotros).
     async verificarPin(pin, ambito) {
@@ -116,7 +109,7 @@
       return pin === (ambito === 'admin' ? C.ADMIN_PIN_PRUEBA : C.TABLERO_PIN_PRUEBA) || pin === C.ADMIN_PIN_PRUEBA;
     },
 
-    // ── Planogramas ── [{id, pdv, tipo, nombre, url}]   (pdv '*' = general, vale para todos los puntos de venta)
+    // ── Planogramas ── [{id, pdv, marca, tipo, nombre, url}]   (pdv '*' = general, vale para todos los puntos de venta)
     async planogramas() {
       if (REMOTO) {
         try {
@@ -129,13 +122,13 @@
           throw e;
         }
       }
-      return (await DB.all('planos')).map((p) => ({ id: p.id, pdv: p.pdv, tipo: p.tipo, nombre: p.nombre, url: urlDe(p.id, p.blob) }));
+      return (await DB.all('planos')).map((p) => ({ id: p.id, pdv: p.pdv, marca: p.marca, tipo: p.tipo, nombre: p.nombre, url: urlDe(p.id, p.blob) }));
     },
-    async agregarPlanograma(pdv, tipo, file, pin) {
+    async agregarPlanograma(pdv, marca, tipo, file, pin) {
       const blob = await comprimir(file);
-      if (REMOTO) return post({ action: 'planograma', pin, pdv, tipo, nombre: file.name, data: await blobToB64(blob) });
+      if (REMOTO) return post({ action: 'planograma', pin, pdv, marca, tipo, nombre: file.name, data: await blobToB64(blob) });
       if (pin !== C.ADMIN_PIN_PRUEBA) throw new Error('PIN incorrecto');
-      return DB.put('planos', { id: uid(), pdv, tipo, nombre: file.name, blob });
+      return DB.put('planos', { id: uid(), pdv, marca, tipo, nombre: file.name, blob });
     },
     async borrarPlanograma(id, pin) {
       if (REMOTO) return post({ action: 'borrarPlanograma', pin, id });
@@ -143,7 +136,7 @@
       return DB.del('planos', id);
     },
 
-    // ── Fotos ──  meta: {pdv, tipo, ci, relevador, criterios: [ids]}
+    // ── Fotos ──  meta: {pdv, marca, tipo, ci, relevador, criterios: [ids]}
     async guardarFotos(meta, blobs) {
       for (const b of blobs) {
         await DB.put('fotos', { id: uid(), ...meta, ts: Date.now(), blob: await comprimir(b), subida: false });
@@ -162,7 +155,7 @@
       for (const f of (await DB.all('fotos')).filter((x) => !x.subida)) {
         try {
           await post({
-            action: 'foto', pdv: f.pdv, tipo: f.tipo, ci: f.ci, relevador: f.relevador,
+            action: 'foto', pdv: f.pdv, marca: f.marca, tipo: f.tipo, ci: f.ci, relevador: f.relevador,
             criterios: f.criterios, ts: f.ts, nombre: `${f.ts}_${f.id}.jpg`, data: await blobToB64(f.blob),
           });
           await DB.del('fotos', f.id);

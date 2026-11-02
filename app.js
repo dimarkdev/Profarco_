@@ -36,21 +36,23 @@
   // ── Estado ──
   const state = {
     planos: [], pdvs: [],
-    usuario: guardado('usuario'),          // {ci, nombre}
-    pdv: '', hechos: new Set(),            // tipos ya relevados en esta visita
+    usuario: guardado('usuario'),          // {ci, nombre, pdvs: [los puntos de venta de ese CI]}
+    pdv: '', marca: '', hechos: new Set(),  // 'marca|tipo' ya relevados en esta visita
     tipo: null,
     fotos: [],                             // [{blob, url}] tomadas en la camara, sin guardar
     criterios: new Set(),
     filtroPdv: '',
-    tab: { desde: '', hasta: '', pdv: '', relevador: '', tipo: '', criterio: '' },
+    tab: { desde: '', hasta: '', pdv: '', marca: '', relevador: '', tipo: '', criterio: '' },
     datos: null,
   };
-  // Drive no admite "/" en nombres de carpeta: el receptor guarda "Islas - Exhibidores".
-  const mismoTipo = (a, b) => String(a).replace(/[\\/:*?"<>|]/g, '-').trim() === String(b).replace(/[\\/:*?"<>|]/g, '-').trim();
-  const planosDe = (pdv, tipo) => {
+  // Drive no admite "/" en nombres de carpeta: el receptor guarda "Bandeja - lateral".
+  const norm = (s) => String(s ?? '').replace(/[\\/:*?"<>|]/g, '-').trim();
+  const mismoTipo = (a, b) => norm(a) === norm(b);
+  const planosDe = (pdv, marca, tipo) => {
     const t = tipoDe(tipo).nombre;
-    const exactos = state.planos.filter((p) => p.pdv === pdv && mismoTipo(p.tipo, t));
-    return exactos.length ? exactos : state.planos.filter((p) => p.pdv === '*' && mismoTipo(p.tipo, t));
+    const cand = state.planos.filter((q) => mismoTipo(q.marca, marca) && mismoTipo(q.tipo, t));
+    const exactos = cand.filter((q) => q.pdv === pdv);
+    return exactos.length ? exactos : cand.filter((q) => q.pdv === '*');
   };
   const nombresPdv = () => [...new Set([...state.pdvs.map((p) => p.nombre), ...state.planos.map((p) => p.pdv).filter((n) => n !== '*')])].sort((a, b) => a.localeCompare(b));
 
@@ -64,14 +66,14 @@
   }
 
   // ═══════════ CAMPO: pasos ═══════════
-  // ci → pdv → tipos → (planograma) → camara → criterios → tipos …
+  // ci → pdv (los del CI) → marca → tipo de espacio → (planograma de esa marca) → camara → criterios → tipos …
   let paso = 'ci';
   const ir = (p) => { paso = p; pintarCampo(); };
 
   function pintarCampo() {
     if (!state.usuario) paso = 'ci';
     else if (paso === 'ci') paso = 'pdv';
-    ({ ci: pasoCI, pdv: pasoPdv, tipos: pasoTipos, criterios: pasoCriterios }[paso] || pasoCI)();
+    ({ ci: pasoCI, pdv: pasoPdv, marca: pasoMarca, tipos: pasoTipos, criterios: pasoCriterios }[paso] || pasoCI)();
   }
 
   function pasoCI(confirmando) {
@@ -98,7 +100,8 @@
       b.disabled = true;
       try {
         const ci = S.soloDigitos(document.getElementById('ci').value);
-        pasoCI({ ci, nombre: await S.login(ci) });
+        const r = await S.login(ci);
+        pasoCI({ ci, nombre: r.nombre, pdvs: r.pdvs });
       } catch (e) {
         const h = document.getElementById('hint');   // mensaje corto bajo el campo, sin ventana
         h.textContent = e.message; h.classList.add('err');
@@ -111,31 +114,44 @@
 
   function pasoPdv() {
     const q = state.filtroPdv.toLowerCase();
-    const lista = state.pdvs.filter((p) => !q || (p.nombre + ' ' + (p.cadena || '') + ' ' + (p.ciudad || '')).toLowerCase().includes(q));
+    const lista = (state.usuario.pdvs || []).filter((p) => !q || (p.nombre + ' ' + (p.cadena || '') + ' ' + (p.ciudad || '')).toLowerCase().includes(q));
     $app.innerHTML = `<div class="wrap"><h1>Punto de venta</h1><p class="lead">Hola, ${esc(state.usuario.nombre)}</p>
       <input class="in" id="q" style="margin-top:22px" placeholder="Buscar punto de venta…" value="${esc(state.filtroPdv)}" autocomplete="off">
       <div class="pdv-list">${lista.length ? lista.map((p) => `<button class="pdv-item" data-n="${esc(p.nombre)}">${esc(p.nombre)}<small>${esc([p.cadena, p.ciudad].filter(Boolean).join(' · '))}</small></button>`).join('')
-        : '<div class="empty">No hay puntos de venta cargados.<br>Agrégalos en la planilla "Puntos de venta".</div>'}</div>
+        : '<div class="empty">No tienes puntos de venta asignados.<br>Reporta con soporte.</div>'}</div>
       <p style="text-align:center;margin-top:24px"><button class="link" id="otro">No soy ${esc(state.usuario.nombre)}</button></p></div>`;
     const q$ = document.getElementById('q');
     q$.oninput = () => { state.filtroPdv = q$.value; const p = q$.selectionStart; pasoPdv(); const n = document.getElementById('q'); n.focus(); n.setSelectionRange(p, p); };
-    $app.querySelectorAll('[data-n]').forEach((b) => b.onclick = () => { state.pdv = b.dataset.n; state.hechos = new Set(); ir('tipos'); });
+    $app.querySelectorAll('[data-n]').forEach((b) => b.onclick = () => { state.pdv = b.dataset.n; state.hechos = new Set(); state.marca = ''; ir('marca'); });
     document.getElementById('otro').onclick = () => { localStorage.removeItem('usuario'); state.usuario = null; ir('ci'); };
   }
 
-  function pasoTipos() {
-    $app.innerHTML = `<div class="wrap"><h1>Tipo de Relevamiento</h1><p class="lead">Selecciona la zona a auditar</p>
+  function pasoMarca() {
+    const hecha = (m) => [...state.hechos].some((h) => h.startsWith(m + '|'));
+    $app.innerHTML = `<div class="wrap"><h1>Marca</h1><p class="lead">¿Qué marca vas a relevar?</p>
       <div class="row" style="margin-top:22px"><button class="back" id="atras" aria-label="Volver">${ICON_BACK}</button><div class="sede">${esc(state.pdv)}</div></div>
-      <div class="tiles">${C.TIPOS.map((t) => `<button class="tile" data-t="${t.id}" style="background:${t.color}">${state.hechos.has(t.id) ? '<span class="hecho">✓ Relevado</span>' : ''}<img src="${t.img}" alt=""><b>${esc(t.nombre)}</b></button>`).join('')}</div>
+      <div class="marcas">${C.MARCAS.map((m) => `<button class="marca-b ${hecha(m) ? 'hecha' : ''}" data-m="${esc(m)}">${esc(m)}${hecha(m) ? '<i>✓</i>' : ''}</button>`).join('')}</div>
       ${state.hechos.size ? '<button class="btn primary block" id="fin" style="margin-top:22px">Finalizar visita</button>' : ''}</div>`;
     document.getElementById('atras').onclick = () => ir('pdv');
+    document.getElementById('fin')?.addEventListener('click', () => { state.hechos = new Set(); ir('pdv'); });
+    $app.querySelectorAll('[data-m]').forEach((b) => b.onclick = () => { state.marca = b.dataset.m; ir('tipos'); });
+  }
+
+  function pasoTipos() {
+    const ico = '<svg viewBox="0 0 24 24" width="54" height="54" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></svg>';
+    $app.innerHTML = `<div class="wrap"><h1>Tipo de espacio</h1><p class="lead">Selecciona el espacio a auditar</p>
+      <div class="row" style="margin-top:22px"><button class="back" id="atras" aria-label="Volver">${ICON_BACK}</button><div class="sede">${esc(state.pdv)}</div></div>
+      <div class="sede-sub"><span>${esc(state.marca)}</span></div>
+      <div class="tiles">${C.TIPOS.map((t) => `<button class="tile ${t.img ? '' : 'sin-img'}" data-t="${t.id}" style="background:${t.color}">${state.hechos.has(state.marca + '|' + t.id) ? '<span class="hecho">✓ Relevado</span>' : ''}${t.img ? `<img src="${t.img}" alt="">` : `<span class="tile-ico">${ico}</span>`}<b>${esc(t.nombre)}</b></button>`).join('')}</div>
+      ${state.hechos.size ? '<button class="btn primary block" id="fin" style="margin-top:22px">Finalizar visita</button>' : ''}</div>`;
+    document.getElementById('atras').onclick = () => ir('marca');
     document.getElementById('fin')?.addEventListener('click', () => { state.hechos = new Set(); ir('pdv'); });
     $app.querySelectorAll('[data-t]').forEach((b) => b.onclick = () => { state.tipo = tipoDe(b.dataset.t); abrirReferencia(); });
   }
 
   // Ventana "Planograma de Referencia": hay que verla completa para poder abrir la camara.
   function abrirReferencia() {
-    const ps = planosDe(state.pdv, state.tipo.id);
+    const ps = planosDe(state.pdv, state.marca, state.tipo.id);
     let i = 0; const vistas = new Set([0]);
     const m = document.createElement('div');
     m.className = 'modal';
@@ -143,11 +159,11 @@
       vistas.add(i);
       const listo = !ps.length || vistas.size === ps.length;
       m.innerHTML = `<div class="modal-card"><button class="x" data-x aria-label="Cerrar">×</button>
-        <h2>Planograma de Referencia</h2><div class="sub">${esc(state.tipo.nombre)}</div>
+        <h2>Planograma de Referencia</h2><div class="sub">${esc(state.marca)} · ${esc(state.tipo.nombre)}</div>
         ${ps.length ? `<div class="ref"><img src="${esc(ps[i].url)}" alt="Planograma">
             ${ps.length > 1 ? '<button class="arrow l" data-n="-1" aria-label="Anterior">‹</button><button class="arrow r" data-n="1" aria-label="Siguiente">›</button>' : ''}</div>
           ${ps.length > 1 ? `<div class="dots">${ps.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div>` : ''}`
-          : '<div class="empty">Este punto de venta todavía no tiene planograma de referencia para esta zona.</div>'}
+          : '<div class="empty">Todavía no hay planograma de referencia de esta marca para este espacio.</div>'}
         <div class="hint">${listo ? (ps.length ? 'Toca la imagen para acercarla' : '') : `Mira las ${ps.length} imágenes para continuar`}</div>
         <button class="btn teal block" data-go ${listo ? '' : 'disabled'}>Entendido, abrir cámara</button></div>`;
       m.querySelector('[data-x]').onclick = () => m.remove();
@@ -167,7 +183,7 @@
     state.fotos = base.slice();
     const el = document.createElement('div');
     el.className = 'cam';
-    el.innerHTML = `<div class="cam-top"><div class="cam-pill">Tomar foto de: ${esc(state.tipo.nombre)}</div></div>
+    el.innerHTML = `<div class="cam-top"><div class="cam-pill">Tomar foto de: ${esc(state.marca)} · ${esc(state.tipo.nombre)}</div></div>
       <div class="cam-view"><video playsinline muted autoplay></video><div class="cam-grid"><i></i><i></i><i></i><i></i></div><div class="flash"></div>
         <button class="cam-ref" data-ref>${ICON_IMG} Ver referencia</button><div class="cam-msg hide" data-msg></div>
         <div class="cam-bar"><button class="btn" data-cerrar>Cerrar</button><button class="shutter" data-disp aria-label="Tomar foto"></button><button class="btn listo hide" data-listo></button></div></div>
@@ -199,7 +215,7 @@
       cv.toBlob((b) => b && agregar(b), 'image/jpeg', C.FOTO_CALIDAD);
     };
     q('[data-file]').onchange = (e) => { for (const f of e.target.files) agregar(f); e.target.value = ''; };
-    q('[data-ref]').onclick = () => lightbox(planosDe(state.pdv, state.tipo.id).map((p, k, a) => ({ url: p.url, caption: `Planograma ${k + 1} de ${a.length}` })));
+    q('[data-ref]').onclick = () => lightbox(planosDe(state.pdv, state.marca, state.tipo.id).map((p, k, a) => ({ url: p.url, caption: `Planograma ${k + 1} de ${a.length}` })));
     q('[data-cerrar]').onclick = () => {
       const nuevas = state.fotos.length - base.length;
       if (nuevas && !confirm(`Se descartarán ${nuevas} foto(s) sin guardar. ¿Cerrar?`)) return;
@@ -210,18 +226,21 @@
     actualizar();
   }
 
-  // Preguntas de cumplimiento (seleccion multiple).
+  // Preguntas del relevamiento: una opcion por pregunta; "Qué ocupa el espacio" solo aparece si la marca no está.
   function pasoCriterios() {
     const sel = state.criterios;
-    $app.innerHTML = `<div class="wrap"><h1>Cumplimiento</h1><p class="lead">${esc(state.pdv)} · ${esc(state.tipo.nombre)}</p>
+    C.PREGUNTAS.filter((q) => q.si && !sel.has(q.si)).forEach((q) => q.opciones.forEach((o) => sel.delete(o.id)));   // si ya no aplica, se descarta
+    const visibles = C.PREGUNTAS.filter((q) => !q.si || sel.has(q.si));
+    const completo = visibles.every((q) => q.opciones.some((o) => sel.has(o.id)));
+    $app.innerHTML = `<div class="wrap"><h1>Relevamiento</h1><p class="lead">${esc(state.pdv)} · ${esc(state.marca)} · ${esc(state.tipo.nombre)}</p>
       <div class="thumbs">${state.fotos.map((f, i) => `<div class="foto"><img src="${esc(f.url)}" alt=""><button class="x" data-del="${i}" aria-label="Quitar">×</button></div>`).join('')}</div>
-      <div class="preg"><h2>¿Qué observaste?</h2><p class="muted">Puedes marcar más de una opción.</p>
-        <div class="opts">${C.CRITERIOS.map((c) => `<button class="opt ${c.tono || ''} ${sel.has(c.id) ? 'on' : ''}" data-c="${c.id}"><span class="box"></span>${esc(c.texto)}</button>`).join('')}</div></div>
-      <div class="sticky-bar"><div class="row"><button class="btn" id="mas">+ Foto</button><button class="btn teal block" id="guardar" ${sel.size && state.fotos.length ? '' : 'disabled'}>Guardar relevamiento</button></div></div></div>`;
+      ${visibles.map((q) => `<div class="preg"><h2>${q.numero ? q.numero + '. ' : ''}${esc(q.titulo)}</h2><p class="muted">${esc(q.nota)}</p>
+        <div class="opts">${q.opciones.map((o) => `<button class="opt radio ${sel.has(o.id) ? 'on' : ''}" data-c="${o.id}"><span class="box"></span>${esc(o.texto)}</button>`).join('')}</div></div>`).join('')}
+      <div class="sticky-bar"><div class="row"><button class="btn" id="mas">+ Foto</button><button class="btn teal block" id="guardar" ${completo && state.fotos.length ? '' : 'disabled'}>Guardar relevamiento</button></div></div></div>`;
     $app.querySelectorAll('[data-c]').forEach((b) => b.onclick = () => {
       const c = criterioDe(b.dataset.c);
-      if (sel.has(c.id)) sel.delete(c.id);
-      else { if (c.grupo) C.CRITERIOS.filter((x) => x.grupo === c.grupo).forEach((x) => sel.delete(x.id)); sel.add(c.id); }
+      C.CRITERIOS.filter((x) => x.grupo === c.grupo).forEach((x) => sel.delete(x.id));   // una sola opcion por pregunta
+      sel.add(c.id);
       pasoCriterios();
     });
     $app.querySelectorAll('[data-del]').forEach((b) => b.onclick = () => { state.fotos.splice(+b.dataset.del, 1); if (!state.fotos.length) ir('tipos'); else pasoCriterios(); });
@@ -229,10 +248,10 @@
     document.getElementById('guardar').onclick = async (e) => {
       e.target.disabled = true; e.target.textContent = 'Guardando…';
       try {
-        const n = state.fotos.length;
-        await S.guardarFotos({ pdv: state.pdv, tipo: state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, criterios: [...sel] }, state.fotos.map((f) => f.blob));
+        const n = state.fotos.length, ids = [...sel];
+        await S.guardarFotos({ pdv: state.pdv, marca: state.marca, tipo: state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, criterios: [...ids, C.resultado(ids)] }, state.fotos.map((f) => f.blob));
         state.fotos.forEach((f) => URL.revokeObjectURL(f.url));
-        state.fotos = []; state.hechos.add(state.tipo.id);
+        state.fotos = []; state.hechos.add(state.marca + '|' + state.tipo.id);
         toast(S.remoto ? `${n} foto(s) guardadas` : `${n} foto(s) guardadas en este dispositivo (modo prueba)`);
         pintarSync(); ir('tipos');
       } catch (err) { toast('No se pudo guardar: ' + err.message); e.target.disabled = false; e.target.textContent = 'Guardar relevamiento'; }
@@ -300,21 +319,19 @@
     const opt = (k) => [...new Set(todas.map((x) => x[k]).filter(Boolean))].sort();
     const lista = todas.filter((x) =>
       (!f.desde || diaISO(x.ts) >= f.desde) && (!f.hasta || diaISO(x.ts) <= f.hasta) &&
-      (!f.pdv || x.pdv === f.pdv) && (!f.relevador || x.relevador === f.relevador) && (!f.tipo || x.tipo === f.tipo) &&
+      (!f.pdv || x.pdv === f.pdv) && (!f.marca || x.marca === f.marca) && (!f.relevador || x.relevador === f.relevador) && (!f.tipo || x.tipo === f.tipo) &&
       (!f.criterio || (x.criterios || []).includes(f.criterio))).sort((a, b) => b.ts - a.ts);
 
     const visitas = [];
     [...lista].sort((a, b) => a.ts - b.ts).forEach((x) => {
-      const v = visitas.find((q) => q.pdv === x.pdv && q.tipo === x.tipo && q.relevador === x.relevador && x.ts - q.fin <= 20 * 60 * 1000);
+      const v = visitas.find((q) => q.pdv === x.pdv && q.marca === x.marca && q.tipo === x.tipo && q.relevador === x.relevador && x.ts - q.fin <= 20 * 60 * 1000);
       if (v) { v.fotos.push(x); v.fin = x.ts; v.criterios = [...new Set([...v.criterios, ...(x.criterios || [])])]; }
-      else visitas.push({ id: x.id, pdv: x.pdv, tipo: x.tipo, relevador: x.relevador, ts: x.ts, fin: x.ts, fotos: [x], criterios: [...(x.criterios || [])] });
+      else visitas.push({ id: x.id, pdv: x.pdv, marca: x.marca, tipo: x.tipo, relevador: x.relevador, ts: x.ts, fin: x.ts, fotos: [x], criterios: [...(x.criterios || [])] });
     });
     visitas.sort((a, b) => b.ts - a.ts);
     const V = visitas;
 
-    const INCID = ['faltan_productos', 'mal_ubicado', 'sin_pop', 'sin_precio', 'competencia', 'sin_espacio'];
-    const ACCION = ['corregido', 'no_modificar'];
-    const GRAVE = ['faltan_productos', 'sin_precio'];   // se pintan en rojo; el resto de incidencias en naranja
+    const INCID = C.CRITERIOS.filter((x) => !x.derivado && (x.tono === 'bad' || x.tono === 'warn')).map((x) => x.id);   // respuestas que cuentan como hallazgo
     const resDe = (x) => ['cumple', 'parcial', 'no_cumple'].find((id) => (x.criterios || []).includes(id)) || null;
     const cnt = (arr, id) => arr.filter((x) => resDe(x) === id).length;
     const tiene = (arr, id) => arr.filter((x) => (x.criterios || []).includes(id)).length;
@@ -357,10 +374,11 @@
     // ── Donut, hallazgos y zonas ──
     const a1 = pct(c, n) || 0, a2 = a1 + (pct(p, n) || 0), a3 = a2 + (pct(nc, n) || 0);
     const donut = n ? `conic-gradient(#22a447 0 ${a1}%, #d89b14 ${a1}% ${a2}%, #d64545 ${a2}% ${a3}%, #d5dcda ${a3}% 100%)` : '#e3e9e7';
-    const frec = INCID.map((id) => [id, tiene(V, id)]).sort((a, b) => b[1] - a[1]);
+    const frec = INCID.map((id) => [id, tiene(V, id)]).filter((r) => r[1]).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    const algun = (arr, ids) => arr.filter((x) => (x.criterios || []).some((id) => ids.includes(id))).length;
     const maxF = Math.max(1, ...frec.map((r) => r[1]));
-    const hallazgos = frec.reduce((a, r) => a + r[1], 0);
-    const zonas = C.TIPOS.map((t) => { const it = V.filter((x) => x.tipo === t.nombre); return { t, n: it.length, pc: pct(cnt(it, 'cumple'), it.filter((x) => resDe(x)).length) }; });
+    const hallazgos = frec.length;
+    const marcasR = C.MARCAS.map((m) => { const it = V.filter((x) => x.marca === m); return { m, n: it.length, pc: pct(cnt(it, 'cumple'), it.filter((x) => resDe(x)).length) }; }).filter((z) => z.n).sort((a, b) => b.n - a.n);
 
     // ── Evaluación: planograma vs foto auditada ──
     const idx = Math.max(0, V.findIndex((v) => v.fotos.some((x) => x.id === state.sel)));
@@ -368,36 +386,34 @@
     let cmp = '<div class="empty">Aún no hay fotos para comparar con estos filtros.</div>', tituloEval = 'Evaluación de góndola';
     const carData = {};
     if (sel) {
-      const t = tipoDe(sel.tipo), refs = t ? planosDe(sel.pdv, t.id) : [], r = resDe(sel), crit = sel.criterios || [];
+      const t = tipoDe(sel.tipo), refs = t ? planosDe(sel.pdv, sel.marca, t.id) : [], r = resDe(sel), crit = sel.criterios || [];
       const ini = Math.max(0, sel.fotos.findIndex((x) => x.id === state.sel));
       carData.ref = refs.map((q) => q.url); carData.foto = sel.fotos.map((x) => x.url);
-      const inc = crit.filter((id) => INCID.includes(id)), acc = crit.filter((id) => ACCION.includes(id));
-      tituloEval = `Evaluación de góndola · ${esc(sel.pdv)}`;
+      const resp = C.PREGUNTAS.map((q) => { const o = q.opciones.find((x) => crit.includes(x.id)); return o ? { q, o } : null; }).filter(Boolean);
+      const neg = resp.filter((r) => r.o.tono !== 'ok');
+      tituloEval = `Evaluación de góndola · ${esc(sel.pdv)}${sel.marca ? ' · ' + esc(sel.marca) : ''}`;
       const resChip = r ? `<span class="chip res ${criterioDe(r).tono}">${svg(r === 'cumple' ? 'cumple' : r === 'parcial' ? 'warn' : 'bad', 15)}${esc(criterioDe(r).texto)}</span>` : '<span class="chip gry">Sin resultado registrado</span>';
-      const chipInc = (id) => `<span class="chip ${crit.includes(id) ? (GRAVE.includes(id) ? 'red' : 'org') : 'gry'}">${esc(criterioDe(id).texto)}</span>`;
-      const chipAcc = (id) => `<span class="chip ${crit.includes(id) ? (id === 'corregido' ? 'grn' : 'org') : 'gry'}">${crit.includes(id) ? '<i class="pt"></i>' : ''}${esc(criterioDe(id).texto)}</span>`;
-      const resumen = `${sel.tipo} en ${sel.pdv}: ${r ? criterioDe(r).texto.toLowerCase() : 'sin resultado registrado'}. ` +
-        (inc.length ? `Se registraron ${inc.length} incidencia${inc.length > 1 ? 's' : ''}: ${inc.map((id) => criterioDe(id).texto.toLowerCase()).join('; ')}.` : 'No se registraron incidencias.') +
-        (acc.length ? ` En la visita: ${acc.map((id) => criterioDe(id).texto.toLowerCase()).join('; ')}.` : '');
+      const chipResp = (r) => `<span class="chip ${r.o.tono === 'bad' ? 'red' : r.o.tono === 'warn' ? 'org' : 'grn'}"><b>${esc(r.q.corto)}:</b> ${esc(r.o.texto)}</span>`;
+      const resumen = `${sel.marca ? sel.marca + ' · ' : ''}${sel.tipo} en ${sel.pdv}: ${r ? criterioDe(r).texto.toLowerCase() : 'sin resultado registrado'}. ` +
+        (neg.length ? `Observaciones: ${neg.map((x) => x.q.corto.toLowerCase() + ' (' + x.o.texto.toLowerCase() + ')').join('; ')}.` : 'Todas las respuestas fueron favorables.');
       // Si hay mas de una imagen, al pasar el mouse aparece un degradado suave en los costados para cambiar de imagen.
       const carro = (key, urls, alt, vacio, i0) => (urls.length
         ? `<div class="cmp-f car" data-car="${key}"><img src="${esc(urls[i0])}" alt="${alt}" data-z="${esc(urls[i0])}">${urls.length > 1
           ? `<button class="car-e l" data-d="-1" aria-label="Anterior">‹</button><button class="car-e r" data-d="1" aria-label="Siguiente">›</button><div class="car-d">${urls.map((_, k) => `<i class="${k === i0 ? 'on' : ''}"></i>`).join('')}</div>` : ''}</div>`
         : `<div class="cmp-f"><div class="cmp-vacio">${vacio}</div></div>`);
       const nF = sel.fotos.length;
-      cmp = `<div class="cmp-bar"><label class="cmp-sel"><span>Góndola auditada</span><select id="selfoto">${V.map((v, i) => `<option value="${esc(v.id)}" ${i === idx ? 'selected' : ''}>${esc(v.pdv)} · ${esc(v.tipo)} · ${fmtFecha(v.ts)}${v.fotos.length > 1 ? ` · ${v.fotos.length} fotos` : ''}</option>`).join('')}</select></label>
+      cmp = `<div class="cmp-bar"><label class="cmp-sel"><span>Góndola auditada</span><select id="selfoto">${V.map((v, i) => `<option value="${esc(v.id)}" ${i === idx ? 'selected' : ''}>${esc(v.pdv)} · ${esc(v.marca || '')} · ${esc(v.tipo)} · ${fmtFecha(v.ts)}${v.fotos.length > 1 ? ` · ${v.fotos.length} fotos` : ''}</option>`).join('')}</select></label>
           <div class="cmp-nav"><button class="ic-btn" id="prev" ${idx === 0 ? 'disabled' : ''} aria-label="Anterior">‹</button><span>${idx + 1} / ${V.length}</span><button class="ic-btn" id="next" ${idx === V.length - 1 ? 'disabled' : ''} aria-label="Siguiente">›</button></div></div>
         <div class="cmp-t"><span>Comparativa visual</span></div>
         <div class="cmp">
-          <div class="cmp-c"><div class="cmp-l">Planograma ideal</div>${carro('ref', carData.ref, 'Planograma ideal', 'Sin planograma de referencia para esta zona', 0)}<small>${esc(sel.tipo)} · ${refs[0] && refs[0].pdv !== '*' ? esc(refs[0].pdv) : 'Planograma general'}${refs.length > 1 ? ` · ${refs.length} imágenes` : ''}</small></div>
+          <div class="cmp-c"><div class="cmp-l">Planograma ideal</div>${carro('ref', carData.ref, 'Planograma ideal', 'Sin planograma de referencia para esta zona', 0)}<small>${esc(sel.marca || '')} · ${esc(sel.tipo)} · ${refs[0] && refs[0].pdv !== '*' ? esc(refs[0].pdv) : 'Planograma general'}${refs.length > 1 ? ` · ${refs.length} imágenes` : ''}</small></div>
           <div class="cmp-arrow" aria-hidden="true"><span class="line"></span><i>→</i><span class="line"></span></div>
           <div class="cmp-c"><div class="cmp-l">Foto auditada</div>${carro('foto', carData.foto, 'Foto auditada', 'Sin imagen', ini)}<small>${esc(sel.pdv)} · ${fmtFecha(sel.ts)}${nF > 1 ? ` · ${nF} fotos` : ''}</small></div>
         </div>
         <div class="cmp-t"><span>Análisis de cumplimiento</span></div>
         <div class="an">
-          <div class="an-a"><div class="an-l">Resultado de visita</div>${resChip}<p class="an-s">Relevó ${esc(sel.relevador)}</p>
-            <div class="an-l sp">Acciones y ajustes</div><div class="chips">${ACCION.map(chipAcc).join('')}</div></div>
-          <div class="an-b"><div class="an-l">Hallazgos detectados</div><div class="chips">${INCID.map(chipInc).join('')}</div></div>
+          <div class="an-a"><div class="an-l">Resultado de visita</div>${resChip}<p class="an-s">Relevó ${esc(sel.relevador)}</p></div>
+          <div class="an-b"><div class="an-l">Hallazgos detectados</div><div class="chips">${resp.map(chipResp).join('')}</div></div>
           <div class="an-c"><div class="an-l">Resumen del relevamiento</div><div class="an-box">${esc(resumen)}</div></div>
         </div>`;
     }
@@ -416,14 +432,14 @@
             <button class="btn-o" id="csv">${svg('down', 17)}Exportar</button></div></header>
         <div class="content">
           <section id="s-resumen"><h1>Auditoría de góndolas</h1><p class="sub">Evaluación de cumplimiento de planogramas y análisis de puntos de venta.</p>
-            <div class="filt">${select('pdv', 'Punto de venta', opt('pdv'))}${select('tipo', 'Zona', C.TIPOS.map((t) => t.nombre))}${select('relevador', 'Relevador', opt('relevador'))}
-              <label class="f-sel"><span>Observación</span><select data-f="criterio"><option value="">Todas</option>${C.CRITERIOS.map((cr) => `<option value="${cr.id}" ${f.criterio === cr.id ? 'selected' : ''}>${esc(cr.texto)}</option>`).join('')}</select></label>
+            <div class="filt">${select('pdv', 'Punto de venta', opt('pdv'))}${select('marca', 'Marca', opt('marca'))}${select('tipo', 'Tipo de espacio', C.TIPOS.map((t) => t.nombre))}${select('relevador', 'Relevador', opt('relevador'))}
+              <label class="f-sel"><span>Respuesta</span><select data-f="criterio"><option value="">Todas</option>${C.CRITERIOS.filter((cr) => !cr.derivado).map((cr) => `<option value="${cr.id}" ${f.criterio === cr.id ? 'selected' : ''}>${esc(cr.etiqueta || cr.texto)}</option>`).join('')}</select></label>
               <label class="f-sel"><span>Desde</span><input type="date" data-f="desde" value="${f.desde}"></label><label class="f-sel"><span>Hasta</span><input type="date" data-f="hasta" value="${f.hasta}"></label></div>
             <div class="k-grid">
               ${kpi('az', 'foto', 'Góndolas auditadas', n)}
               ${kpi('ok', 'cumple', 'Cumplimiento general', pctCumple === null ? '–' : pctCumple + '%', pctCumple === null ? '' : `<div class="k-bar"><b class="ok" style="width:${pctCumple}%"></b></div>`)}
-              ${kpi('bad', 'warn', 'Quiebres de stock', tiene(V, 'faltan_productos'))}
-              ${kpi('warn', 'warn', 'Material POP faltante', tiene(V, 'sin_pop'))}
+              ${kpi('bad', 'warn', 'Quiebres de stock', algun(V, ['abast_bajo', 'abast_sin']))}
+              ${kpi('warn', 'warn', 'Precio ausente o incorrecto', algun(V, ['precio_mal', 'precio_no']))}
             </div></section>
           <section class="panel" id="s-cmp"><div class="p-head"><i class="k-ico az">${svg('cmp', 18)}</i><div><h2>${tituloEval}</h2></div></div>${cmp}</section>
           <section class="panel" id="s-pdv"><div class="p-head"><i class="k-ico ok">${svg('pin', 18)}</i><div><h2>Estado de góndolas por punto de venta</h2><p>La barra muestra el resultado de las fotos de cada punto de venta.</p></div>
@@ -436,13 +452,13 @@
             <section class="panel"><div class="p-head"><div><h2>Resultado general</h2><p>${n} góndola${n === 1 ? '' : 's'} auditada${n === 1 ? '' : 's'}</p></div></div>
               <div class="donut-w"><div class="donut" style="background:${donut}"><div><b>${pctCumple === null ? '–' : pctCumple + '%'}</b><small>cumple</small></div></div>
                 <ul class="d-leg"><li><i class="ok"></i>Cumple<b>${c}</b></li><li><i class="warn"></i>Parcial<b>${p}</b></li><li><i class="bad"></i>No cumple<b>${nc}</b></li><li><i class="mut"></i>Sin resultado<b>${sin}</b></li></ul></div></section>
-            <section class="panel"><div class="p-head"><div><h2>Hallazgos más frecuentes</h2><p>Incidencias registradas por los relevadores</p></div></div>
-              ${hallazgos ? frec.map(([id, v]) => `<div class="fr-row"><span>${esc(criterioDe(id).texto)}</span><div class="fr-t"><i style="width:${(v / maxF) * 100}%"></i></div><b>${v}</b></div>`).join('') : '<div class="empty">Sin incidencias registradas</div>'}</section>
-            <section class="panel"><div class="p-head"><div><h2>Cobertura por zona</h2><p>Góndolas auditadas y cumplimiento por tipo de relevamiento</p></div></div>
-              ${zonas.map((z) => `<div class="zn-row"><span>${esc(z.t.nombre)}</span><b>${z.n}</b><em class="${tonoPct(z.pc)}">${z.pc === null ? '–' : z.pc + '%'}</em></div>`).join('')}</section>
+            <section class="panel"><div class="p-head"><div><h2>Hallazgos más frecuentes</h2><p>Respuestas con observaciones, por cantidad de góndolas</p></div></div>
+              ${hallazgos ? frec.map(([id, v]) => `<div class="fr-row"><span>${esc(criterioDe(id).etiqueta || criterioDe(id).texto)}</span><div class="fr-t"><i style="width:${(v / maxF) * 100}%"></i></div><b>${v}</b></div>`).join('') : '<div class="empty">Sin hallazgos registrados</div>'}</section>
+            <section class="panel"><div class="p-head"><div><h2>Cumplimiento por marca</h2><p>Góndolas auditadas y cumplimiento de cada marca</p></div></div>
+              ${marcasR.length ? marcasR.map((z) => `<div class="zn-row"><span>${esc(z.m)}</span><b>${z.n}</b><em class="${tonoPct(z.pc)}">${z.pc === null ? '–' : z.pc + '%'}</em></div>`).join('') : '<div class="empty">Sin datos por marca</div>'}</section>
           </div>
           <section class="panel" id="s-gal"><div class="p-head"><i class="k-ico mut">${svg('img', 18)}</i><div><h2>Galería</h2><p>Toca una foto para compararla con su planograma.</p></div></div>
-            <div class="galeria">${lista.length ? lista.map((x) => `<button class="g-item ${sel && sel.fotos.some((q) => q.id === x.id) ? 'on' : ''}" data-g="${esc(x.id)}"><img src="${esc(x.thumb || x.url)}" loading="lazy" alt=""><div><b>${esc(x.pdv)}</b><small>${esc(x.tipo)} · ${esc(x.relevador)}</small><small class="num">${fmtFecha(x.ts)}${x.pendiente ? ' · por subir' : ''}</small><div class="tags">${tags(x)}</div></div></button>`).join('') : '<div class="empty">Aún no hay fotos</div>'}</div></section>
+            <div class="galeria">${lista.length ? lista.map((x) => `<button class="g-item ${sel && sel.fotos.some((q) => q.id === x.id) ? 'on' : ''}" data-g="${esc(x.id)}"><img src="${esc(x.thumb || x.url)}" loading="lazy" alt=""><div><b>${esc(x.pdv)}</b><small>${esc(x.marca || '')} · ${esc(x.tipo)}</small><small>${esc(x.relevador)}</small><small class="num">${fmtFecha(x.ts)}${x.pendiente ? ' · por subir' : ''}</small><div class="tags">${tags(x)}</div></div></button>`).join('') : '<div class="empty">Aún no hay fotos</div>'}</div></section>
         </div></div></div>`;
 
     $app.querySelectorAll('[data-f]').forEach((el) => el.onchange = () => { f[el.dataset.f] = el.value; if (el.dataset.f === 'desde' || el.dataset.f === 'hasta') state.periodo = ''; pintarTablero(); });
@@ -471,37 +487,38 @@
     if (document.getElementById('next')) document.getElementById('next').onclick = () => ir(1);
     document.getElementById('salir').onclick = () => { localStorage.removeItem('pin-tablero'); sessionStorage.removeItem('pin-tablero'); location.reload(); };
     document.getElementById('csv').onclick = () => {
-      const filas = [['Fecha', 'Punto de venta', 'Tipo', 'Relevador', 'Observaciones', 'Enlace'],
-        ...lista.map((x) => [new Date(x.ts).toISOString(), x.pdv, x.tipo, x.relevador, (x.criterios || []).map((id) => criterioDe(id).texto).join('; '), x.pendiente ? '(por subir)' : x.url])];
+      const filas = [['Fecha', 'Punto de venta', 'Marca', 'Tipo de espacio', 'Relevador', 'Observaciones', 'Enlace'],
+        ...lista.map((x) => [new Date(x.ts).toISOString(), x.pdv, x.marca || '', x.tipo, x.relevador, (x.criterios || []).map((id) => criterioDe(id).texto).join('; '), x.pendiente ? '(por subir)' : x.url])];
       const csv = '﻿' + filas.map((r) => r.map((cc) => `"${String(cc).replace(/"/g, '""')}"`).join(',')).join('\n');
       Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })), download: `fotos-gondola-${diaISO(Date.now())}.csv` }).click();
     };
   }
 
   // ═══════════ PLANOGRAMAS ═══════════
-  const admin = { pdv: '*', tipo: C.TIPOS[0].nombre };
+  const admin = { pdv: '*', marca: C.MARCAS[0], tipo: C.TIPOS[0].nombre };
   function vistaPlanogramas(pin) {
     const pdvs = nombresPdv();
-    const etiqueta = (p) => (p === '*' ? 'General (todos los puntos de venta)' : p);
-    const grupos = ['*', ...pdvs].filter((p) => state.planos.some((x) => x.pdv === p));
+    const etiqueta = (q) => (q === '*' ? 'General (todos los puntos de venta)' : q);
+    const grupos = ['*', ...pdvs].filter((q) => state.planos.some((x) => x.pdv === q));
     $app.innerHTML = `<div class="wrap">
-      <h1>Planogramas</h1><p class="lead">Imágenes de referencia que verá el relevador antes de fotografiar.</p>
+      <h1>Planogramas</h1><p class="lead">Imágenes de referencia por marca y tipo de espacio que verá el relevador antes de fotografiar.</p>
       <div class="card stack" style="margin-top:16px">
-        <label class="field"><span class="label">Punto de venta</span><select class="in" id="pdv"><option value="*" ${admin.pdv === '*' ? 'selected' : ''}>General (todos los puntos de venta)</option>${pdvs.map((p) => `<option ${p === admin.pdv ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></label>
-        <label class="field"><span class="label">Tipo de relevamiento</span><select class="in" id="tipo">${C.TIPOS.map((t) => `<option ${t.nombre === admin.tipo ? 'selected' : ''}>${esc(t.nombre)}</option>`).join('')}</select></label>
+        <label class="field"><span class="label">Punto de venta</span><select class="in" id="pdv"><option value="*" ${admin.pdv === '*' ? 'selected' : ''}>General (todos los puntos de venta)</option>${pdvs.map((q) => `<option ${q === admin.pdv ? 'selected' : ''}>${esc(q)}</option>`).join('')}</select></label>
+        <label class="field"><span class="label">Marca</span><select class="in" id="marca">${C.MARCAS.map((m) => `<option ${m === admin.marca ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></label>
+        <label class="field"><span class="label">Tipo de espacio</span><select class="in" id="tipo">${C.TIPOS.map((t) => `<option ${t.nombre === admin.tipo ? 'selected' : ''}>${esc(t.nombre)}</option>`).join('')}</select></label>
         <label class="btn teal block" for="subir">Agregar imágenes</label><input type="file" id="subir" accept="image/*" multiple class="hide">
-        <p class="muted" style="font-size:13px">Si un punto de venta no tiene planograma propio, se muestra el general de ese tipo.</p>
+        <p class="muted" style="font-size:13px">Si un punto de venta no tiene planograma propio para esa marca y espacio, se muestra el general.</p>
       </div>
-      ${grupos.map((p) => `<div class="card" style="margin-top:14px"><h3>${esc(etiqueta(p))}</h3>${C.TIPOS.map((t) => {
-        const ps = state.planos.filter((x) => x.pdv === p && mismoTipo(x.tipo, t.nombre));
-        return ps.length ? `<div class="label" style="margin-top:12px">${esc(t.nombre)}</div><div class="plano-grid">${ps.map((x) => `<div class="foto"><img src="${esc(x.url)}" alt="" data-ver="${esc(x.url)}"><button class="x" data-borrar="${esc(x.id)}" aria-label="Borrar">×</button></div>`).join('')}</div>` : '';
+      ${grupos.map((q) => `<div class="card" style="margin-top:14px"><h3>${esc(etiqueta(q))}</h3>${C.MARCAS.map((m) => {
+        const tipos = C.TIPOS.map((t) => [t, state.planos.filter((x) => x.pdv === q && mismoTipo(x.marca, m) && mismoTipo(x.tipo, t.nombre))]).filter((r) => r[1].length);
+        return tipos.length ? `<div class="label" style="margin-top:14px;color:var(--ink)">${esc(m)}</div>${tipos.map(([t, ps]) => `<div class="label" style="margin-top:8px">${esc(t.nombre)}</div><div class="plano-grid">${ps.map((x) => `<div class="foto"><img src="${esc(x.url)}" alt="" data-ver="${esc(x.url)}"><button class="x" data-borrar="${esc(x.id)}" aria-label="Borrar">×</button></div>`).join('')}</div>`).join('')}` : '';
       }).join('')}</div>`).join('')}
     </div>`;
-    const lee = () => { admin.pdv = document.getElementById('pdv').value; admin.tipo = document.getElementById('tipo').value; };
+    const lee = () => { admin.pdv = document.getElementById('pdv').value; admin.marca = document.getElementById('marca').value; admin.tipo = document.getElementById('tipo').value; };
     document.getElementById('subir').onchange = async (e) => {
       lee();
       try {
-        for (const file of e.target.files) await S.agregarPlanograma(admin.pdv, admin.tipo, file, pin);
+        for (const file of e.target.files) await S.agregarPlanograma(admin.pdv, admin.marca, admin.tipo, file, pin);
         state.planos = await S.planogramas(); toast('Planograma guardado'); vistaPlanogramas(pin);
       } catch (err) { toast(err.message); }
     };
@@ -516,13 +533,26 @@
   //  index.html (data-page="campo")    relevadores
   //  tablero.html (data-page="tablero") cliente, solo lectura, con clave
   //  admin.html (data-page="admin")    planogramas, solo nosotros
+  // Al abrir, el relevador recibe de nuevo sus puntos de venta (por si cambiaron sus asignaciones).
+  async function refrescarUsuario() {
+    if (!state.usuario || !navigator.onLine || !S.remoto) return;
+    try {
+      const r = await S.login(state.usuario.ci);
+      state.usuario = { ci: state.usuario.ci, nombre: r.nombre, pdvs: r.pdvs };
+      localStorage.setItem('usuario', JSON.stringify(state.usuario));
+      if (paso === 'pdv') pintarCampo();
+    } catch (e) {
+      if (/no encontrada/i.test(e.message)) { localStorage.removeItem('usuario'); state.usuario = null; pintarCampo(); }
+    }
+  }
   async function iniciar() {
     const pagina = document.body.dataset.page;
-    try { [state.planos, state.pdvs] = await Promise.all([S.planogramas(), S.puntosDeVenta()]); }
+    try { state.planos = await S.planogramas(); }
     catch (e) { toast('Sin conexión con Drive: ' + e.message); }
-    if (pagina === 'tablero') conPin(vistaTablero, 'tablero');
-    else if (pagina === 'admin') conPin(vistaPlanogramas, 'admin');
-    else pintarCampo();
+    const conPdvs = (vista) => async (pin) => { try { state.pdvs = await S.puntosDeVenta(pin); } catch (e) { state.pdvs = []; } vista(pin); };
+    if (pagina === 'tablero') conPin(conPdvs(vistaTablero), 'tablero');
+    else if (pagina === 'admin') conPin(conPdvs(vistaPlanogramas), 'admin');
+    else { pintarCampo(); refrescarUsuario(); }
     pintarSync();
   }
 

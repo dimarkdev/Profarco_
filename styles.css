@@ -414,3 +414,23 @@ body.dash .g-item.on { border-color: #3cb3a8; box-shadow: 0 0 0 3px rgba(60,179,
 .car-d { position: absolute; left: 0; right: 0; bottom: 8px; display: flex; justify-content: center; gap: 5px; z-index: 2; pointer-events: none; }
 .car-d i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.55); }
 .car-d i.on { background: #fff; }
+
+/* ── Marca y tipo de espacio ── */
+.marcas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+.marca-b { position: relative; min-height: 58px; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: var(--r-md); background: var(--surface); font-weight: 650; font-size: 15px; text-align: center; }
+.marca-b:active { border-color: var(--teal); }
+.marca-b.hecha { border-color: #22a447; background: #effaf2; }
+.marca-b i { position: absolute; top: 6px; right: 9px; font-style: normal; font-size: 12px; font-weight: 700; color: #1d7f3e; }
+.sede-sub { margin: 8px 0 0; text-align: center; }
+.sede-sub span { display: inline-block; padding: 4px 14px; border-radius: 999px; background: rgba(60,179,168,.15); color: var(--teal-dark); font-weight: 700; font-size: 14px; }
+.tile.sin-img { min-height: 130px; justify-content: center; gap: 10px; }
+.tile .tile-ico { display: grid; place-items: center; opacity: .9; }
+.tile.sin-img b { font-size: 1.1rem; }
+.tiles { gap: 12px; }
+.tile { min-height: 170px; }
+.tile img { height: 92px; }
+
+/* Preguntas de opcion unica */
+.opt.radio .box { border-radius: 50%; }
+.opt.radio.on .box { background: var(--teal); border-color: var(--teal); box-shadow: inset 0 0 0 3px #fff; }
+.chip b { font-weight: 700; }
