@@ -112,7 +112,7 @@
     },
     // ambito 'tablero' (clave del cliente) o 'admin' (planogramas, solo nosotros).
     async verificarPin(pin, ambito) {
-      if (REMOTO) { try { await post({ action: 'pin', pin, ambito }); return true; } catch (e) { return false; } }
+      if (REMOTO) { try { await post({ action: 'pin', pin, ambito }); return true; } catch (e) { if (/Demasiados/.test(e.message)) throw e; return false; } }
       return pin === (ambito === 'admin' ? C.ADMIN_PIN_PRUEBA : C.TABLERO_PIN_PRUEBA) || pin === C.ADMIN_PIN_PRUEBA;
     },
 

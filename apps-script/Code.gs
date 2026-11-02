@@ -28,6 +28,14 @@ function sub_(padre, nombre) { const it = padre.getFoldersByName(nombre); return
 function tokenOk_(t) { return !!prop_('TOKEN') && t === prop_('TOKEN'); }
 function pinOk_(p) { return !!prop_('ADMIN_PIN') && String(p) === prop_('ADMIN_PIN'); }
 function tableroOk_(p) { return pinOk_(p) || (!!prop_('TABLERO_PIN') && String(p) === prop_('TABLERO_PIN')); }
+// Limite de intentos: tras MAX_FALLOS claves incorrectas se bloquean las claves (tablero y admin) por BLOQUEO_SEG segundos.
+const MAX_FALLOS = 5;
+const BLOQUEO_SEG = 600;
+function bloqueado_() { return Number(CacheService.getScriptCache().get('fallos_clave') || 0) >= MAX_FALLOS; }
+function chequeo_(ok) {
+  if (!ok) { const c = CacheService.getScriptCache(); c.put('fallos_clave', String(Number(c.get('fallos_clave') || 0) + 1), BLOQUEO_SEG); }
+  return ok;
+}
 function activo_(v) { return ['no', 'n', '0', 'false', 'inactivo'].indexOf(String(v).trim().toLowerCase()) < 0; }
 
 // Filas de una planilla de Maestros (sin el encabezado).
@@ -63,12 +71,14 @@ function doPost(e) {
     }
     if (b.action === 'foto') return json_({ ok: true, id: guardarFoto_(b) });
 
+    if (bloqueado_()) return json_({ ok: false, error: 'Demasiados intentos. Espera unos minutos.' });
+
     // Tablero del cliente: acepta la clave del tablero o la de administracion.
-    if (b.action === 'pin' && b.ambito !== 'admin') return tableroOk_(b.pin) ? json_({ ok: true }) : json_({ ok: false, error: 'Clave incorrecta' });
-    if (b.action === 'fotos') return tableroOk_(b.pin) ? json_({ ok: true, fotos: listarFotos_() }) : json_({ ok: false, error: 'Clave incorrecta' });
+    if (b.action === 'pin' && b.ambito !== 'admin') return chequeo_(tableroOk_(b.pin)) ? json_({ ok: true }) : json_({ ok: false, error: 'Clave incorrecta' });
+    if (b.action === 'fotos') return chequeo_(tableroOk_(b.pin)) ? json_({ ok: true, fotos: listarFotos_() }) : json_({ ok: false, error: 'Clave incorrecta' });
 
     // Lo siguiente (planogramas) es solo de administracion.
-    if (!pinOk_(b.pin)) return json_({ ok: false, error: 'PIN incorrecto' });
+    if (!chequeo_(pinOk_(b.pin))) return json_({ ok: false, error: 'PIN incorrecto' });
     if (b.action === 'pin') return json_({ ok: true });
     if (b.action === 'planograma') {
       const carpeta = sub_(sub_(DriveApp.getFolderById(CARPETA_PLANOS), b.pdv === '*' ? '_General' : limpio_(b.pdv)), limpio_(b.tipo));

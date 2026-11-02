@@ -242,21 +242,46 @@
   // ═══════════ Administracion: acceso con PIN ═══════════
   async function conPin(siguiente, ambito) {
     const clave = 'pin-' + ambito;
-    if (sessionStorage.getItem(clave) && await S.verificarPin(sessionStorage.getItem(clave), ambito)) return siguiente(sessionStorage.getItem(clave));
-    $app.innerHTML = `<div class="wrap"><h1>${ambito === 'admin' ? 'Administración' : 'Tablero de góndolas'}</h1><p class="lead">Ingresa la clave de acceso</p><div class="stack" style="margin-top:24px">
-      <input class="in ci" id="pin" type="password" autocomplete="off" placeholder="Clave"><button class="btn primary block" id="ok">Entrar</button></div></div>`;
+    const valida = async (p) => { try { return await S.verificarPin(p, ambito); } catch (e) { toast(e.message); return null; } };  // null: bloqueado por intentos
+    const guardada = sessionStorage.getItem(clave);
+    if (guardada) {
+      const v = await valida(guardada);
+      if (v || (v === null && state.datos)) return siguiente(guardada);   // bloqueado con el tablero ya abierto: se conserva lo que se ve
+    }
+    // Ingreso: tarjeta clara sobre fondo con cuadros flotantes
+    const cuadros = Array.from({ length: 26 }, () => {
+      const t = 14 + Math.random() * 44, rojo = Math.random() < .22, a = (rojo ? .45 + Math.random() * .4 : .2 + Math.random() * .6).toFixed(2);
+      return `<i style="left:${(Math.random() * 96).toFixed(1)}%;top:${(Math.random() * 94).toFixed(1)}%;width:${t.toFixed(0)}px;height:${t.toFixed(0)}px;transform:rotate(${(Math.random() * 60 - 30).toFixed(0)}deg);background:${rojo ? `rgba(193,29,42,${a})` : `rgba(60,179,168,${a})`};animation-delay:-${(Math.random() * 9).toFixed(1)}s"></i>`;
+    }).join('');
+    const icoLock = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 017 0v2.5"/></svg>';
+    const icoOjo = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+    document.body.classList.add('login-pin');
+    $app.innerHTML = `<div class="pin-bg" aria-hidden="true">${cuadros}</div>
+      <div class="pin-wrap"><div class="pin-card">
+        <img class="pin-logo" src="img/logo-masmarka.png" alt="+MARKA">
+        <p class="pin-tag">${ambito === 'admin' ? 'Administración<br>de planogramas' : 'Tablero de góndolas<br>Profarco'}</p>
+        <label class="pin-lab" for="pin">Clave de acceso</label>
+        <div class="pin-in">${icoLock}<input id="pin" type="password" autocomplete="off" placeholder="Ingresa tu clave"><button type="button" class="ojo" id="ojo" aria-label="Mostrar u ocultar clave">${icoOjo}</button></div>
+        <p class="pin-err" id="err"></p>
+        <button class="pin-btn" id="ok">Iniciar sesión <span aria-hidden="true">→</span></button>
+      </div><p class="pin-foot">© 2026 +MARKA. Todos los derechos reservados.</p></div>`;
     const entrar = async () => {
       const pin = document.getElementById('pin').value;
-      if (await S.verificarPin(pin, ambito)) { sessionStorage.setItem(clave, pin); siguiente(pin); } else toast('Clave incorrecta');
+      const ok = await valida(pin);
+      if (ok) { sessionStorage.setItem(clave, pin); document.body.classList.remove('login-pin'); siguiente(pin); }
+      else if (ok === false) document.getElementById('err').textContent = 'Clave incorrecta';
     };
     document.getElementById('ok').onclick = entrar;
     document.getElementById('pin').onkeydown = (e) => { if (e.key === 'Enter') entrar(); };
+    document.getElementById('ojo').onclick = () => { const i = document.getElementById('pin'); i.type = i.type === 'password' ? 'text' : 'password'; };
   }
 
   // ═══════════ TABLERO ═══════════
   async function vistaTablero(pin) {
-    $app.innerHTML = '<div class="wrap wide"><div class="empty">Cargando fotos…</div></div>';
-    try { state.datos = await S.todasLasFotos(pin); } catch (e) { $app.innerHTML = `<div class="wrap wide"><div class="empty">No se pudo leer Drive: ${esc(e.message)}</div></div>`; return; }
+    if (!state.datos) $app.innerHTML = '<div class="wrap wide"><div class="empty">Cargando fotos…</div></div>';
+    try { state.datos = await S.todasLasFotos(pin); } catch (e) {
+      if (state.datos) { toast(e.message); return pintarTablero(); }
+      $app.innerHTML = `<div class="wrap wide"><div class="empty">No se pudo leer Drive: ${esc(e.message)}</div></div>`; return; }
     pintarTablero();
   }
 
