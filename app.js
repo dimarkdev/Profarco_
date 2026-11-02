@@ -243,7 +243,7 @@
   async function conPin(siguiente, ambito) {
     const clave = 'pin-' + ambito;
     const valida = async (p) => { try { return await S.verificarPin(p, ambito); } catch (e) { toast(e.message); return null; } };  // null: bloqueado por intentos
-    const guardada = sessionStorage.getItem(clave);
+    const guardada = localStorage.getItem(clave) || sessionStorage.getItem(clave);   // 'Recordarme en este dispositivo' usa localStorage
     if (guardada) {
       const v = await valida(guardada);
       if (v || (v === null && state.datos)) return siguiente(guardada);   // bloqueado con el tablero ya abierto: se conserva lo que se ve
@@ -259,20 +259,28 @@
     $app.innerHTML = `<div class="pin-bg" aria-hidden="true">${cuadros}</div>
       <div class="pin-wrap"><div class="pin-card">
         <img class="pin-logo" src="img/logo-masmarka.png" alt="+MARKA">
-        <p class="pin-tag">${ambito === 'admin' ? 'Administración<br>de planogramas' : 'Tablero de góndolas<br>Profarco'}</p>
+        <p class="pin-tag">${ambito === 'admin' ? 'Administración<br>de planogramas' : 'Plataforma de ejecución<br>en punto de venta'}</p>
         <label class="pin-lab" for="pin">Clave de acceso</label>
         <div class="pin-in">${icoLock}<input id="pin" type="password" autocomplete="off" placeholder="Ingresa tu clave"><button type="button" class="ojo" id="ojo" aria-label="Mostrar u ocultar clave">${icoOjo}</button></div>
+        <label class="pin-rec"><input type="checkbox" id="rec" checked> Recordarme en este dispositivo</label>
+        <button type="button" class="pin-olv" id="olv">¿Olvidaste tu clave?</button>
         <p class="pin-err" id="err"></p>
         <button class="pin-btn" id="ok">Iniciar sesión <span aria-hidden="true">→</span></button>
       </div><p class="pin-foot">© 2026 +MARKA. Todos los derechos reservados.</p></div>`;
     const entrar = async () => {
       const pin = document.getElementById('pin').value;
       const ok = await valida(pin);
-      if (ok) { sessionStorage.setItem(clave, pin); document.body.classList.remove('login-pin'); siguiente(pin); }
+      if (ok) {
+        const rec = document.getElementById('rec').checked;
+        (rec ? localStorage : sessionStorage).setItem(clave, pin);
+        (rec ? sessionStorage : localStorage).removeItem(clave);
+        document.body.classList.remove('login-pin'); siguiente(pin);
+      }
       else if (ok === false) document.getElementById('err').textContent = 'Clave incorrecta';
     };
     document.getElementById('ok').onclick = entrar;
     document.getElementById('pin').onkeydown = (e) => { if (e.key === 'Enter') entrar(); };
+    document.getElementById('olv').onclick = () => { document.getElementById('err').textContent = 'Solicita tu clave al equipo de +MARKA.'; };
     document.getElementById('ojo').onclick = () => { const i = document.getElementById('pin'); i.type = i.type === 'password' ? 'text' : 'password'; };
   }
 
@@ -286,57 +294,159 @@
   }
 
   function pintarTablero() {
+    document.body.classList.add('dash');
     const f = state.tab, todas = state.datos || [];
+    const hoy = diaISO(Date.now());
     const opt = (k) => [...new Set(todas.map((x) => x[k]).filter(Boolean))].sort();
     const lista = todas.filter((x) =>
       (!f.desde || diaISO(x.ts) >= f.desde) && (!f.hasta || diaISO(x.ts) <= f.hasta) &&
       (!f.pdv || x.pdv === f.pdv) && (!f.relevador || x.relevador === f.relevador) && (!f.tipo || x.tipo === f.tipo) &&
       (!f.criterio || (x.criterios || []).includes(f.criterio))).sort((a, b) => b.ts - a.ts);
 
-    const cuenta = (fn) => { const o = {}; lista.forEach((x) => { const k = fn(x); if (k) o[k] = (o[k] || 0) + 1; }); return Object.entries(o).sort((a, b) => b[1] - a[1]); };
-    const porPdv = cuenta((x) => x.pdv);
-    const critCuenta = C.CRITERIOS.map((c) => [c, lista.filter((x) => (x.criterios || []).includes(c.id)).length]);
-    const conResultado = lista.filter((x) => (x.criterios || []).some((id) => criterioDe(id).grupo === 'resultado'));
-    const cumplen = lista.filter((x) => (x.criterios || []).includes('cumple')).length;
-    const pctCumple = conResultado.length ? Math.round((cumplen / conResultado.length) * 100) : null;
-    const pdvs = [...new Set([...nombresPdv(), ...lista.map((x) => x.pdv)])].sort();
-    const celda = (p, t) => lista.filter((x) => x.pdv === p && x.tipo === t.nombre).length;
-    const maxP = porPdv[0]?.[1] || 1, maxC = Math.max(1, ...critCuenta.map((c) => c[1]));
-    const select = (k, label, vals) => `<label class="field"><span class="label">${label}</span><select class="in" data-f="${k}"><option value="">Todos</option>${vals.map((v) => `<option ${f[k] === v ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label>`;
+    const INCID = ['faltan_productos', 'mal_ubicado', 'sin_pop', 'sin_precio', 'competencia', 'sin_espacio'];
+    const ACCION = ['corregido', 'no_modificar'];
+    const GRAVE = ['faltan_productos', 'sin_precio'];   // se pintan en rojo; el resto de incidencias en naranja
+    const resDe = (x) => ['cumple', 'parcial', 'no_cumple'].find((id) => (x.criterios || []).includes(id)) || null;
+    const cnt = (arr, id) => arr.filter((x) => resDe(x) === id).length;
+    const tiene = (arr, id) => arr.filter((x) => (x.criterios || []).includes(id)).length;
+    const pct = (a, b) => (b ? Math.round((a / b) * 100) : null);
+    const ico = (n) => ({
+      foto: '<path d="M7 4.5h8l3 3V19a1 1 0 01-1 1H7a1 1 0 01-1-1V5.5a1 1 0 011-1z"/><path d="M9 11h6M9 14h6M9 17h4"/>',
+      ok: '<circle cx="12" cy="12" r="8.5"/><path d="M8.3 12.3l2.5 2.5 4.9-5.2"/>',
+      warn: '<path d="M12 4.5l8.5 14.5h-17z"/><path d="M12 10v4M12 16.5v.1"/>',
+      bad: '<circle cx="12" cy="12" r="8.5"/><path d="M9 9l6 6M15 9l-6 6"/>',
+      cumple: '<path d="M5 13l4 4L19 7"/>',
+      flag: '<path d="M6 20V5m0 0h10l-1.8 3.2L16 11.5H6"/>',
+      pin: '<path d="M12 20s6-5.6 6-10.2A6 6 0 006 9.8C6 14.4 12 20 12 20z"/><circle cx="12" cy="9.8" r="2.2"/>',
+      cmp: '<path d="M5 19V9m5 10V5m5 14v-7m5 7V8"/>',
+      grid: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>',
+      img: '<rect x="4" y="5" width="16" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.5"/><path d="M5 17l4.5-4.5 3 3 2.5-2.5L19 17"/>',
+      down: '<path d="M12 4v11m0 0l-4-4m4 4l4-4M5 19.5h14"/>',
+      out: '<path d="M10 5H6.5A1.5 1.5 0 005 6.5v11A1.5 1.5 0 006.5 19H10M15 8l4 4-4 4M19 12H9"/>',
+    }[n] || '');
+    const svg = (n, s = 20) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ico(n)}</svg>`;
     const tags = (x) => (x.criterios || []).map((id) => { const c = criterioDe(id); return `<span class="badge ${c.tono || ''}">${esc(c.texto)}</span>`; }).join('');
 
-    $app.innerHTML = `<div class="wrap wide">
-      <div class="row between"><div><h1>Tablero de góndolas</h1><p class="lead">Fotos relevadas por los promotores</p></div><button class="btn sm" id="csv">Exportar CSV</button></div>
-      <div class="filters">
-        <label class="field"><span class="label">Desde</span><input type="date" class="in" data-f="desde" value="${f.desde}"></label>
-        <label class="field"><span class="label">Hasta</span><input type="date" class="in" data-f="hasta" value="${f.hasta}"></label>
-        ${select('pdv', 'Punto de venta', opt('pdv'))}${select('relevador', 'Relevador', opt('relevador'))}${select('tipo', 'Tipo', C.TIPOS.map((t) => t.nombre))}
-        <label class="field"><span class="label">Observación</span><select class="in" data-f="criterio"><option value="">Todas</option>${C.CRITERIOS.map((c) => `<option value="${c.id}" ${f.criterio === c.id ? 'selected' : ''}>${esc(c.texto)}</option>`).join('')}</select></label>
-      </div>
-      <div class="kpis">
-        <div class="kpi"><div class="v">${lista.length}</div><div class="t">Fotos</div></div>
-        <div class="kpi"><div class="v">${pctCumple === null ? '–' : pctCumple + '%'}</div><div class="t">Cumple con el planograma</div></div>
-        <div class="kpi"><div class="v">${new Set(lista.map((x) => x.pdv)).size}<span class="muted" style="font-size:1.1rem"> / ${pdvs.length}</span></div><div class="t">Puntos de venta con fotos</div></div>
-        <div class="kpi"><div class="v">${new Set(lista.map((x) => x.relevador)).size}</div><div class="t">Relevadores</div></div>
-      </div>
-      <div class="cols">
-        <div class="card"><h3>Observaciones</h3>${critCuenta.map(([c, n]) => `<div class="bar-row"><span class="name" title="${esc(c.texto)}">${esc(c.texto)}</span><div class="track"><i class="${c.tono || ''}" style="width:${(n / maxC) * 100}%"></i></div><span class="num">${n}</span></div>`).join('')}</div>
-        <div class="card"><h3>Fotos por punto de venta</h3>${porPdv.length ? porPdv.map(([l, n]) => `<div class="bar-row"><span class="name" title="${esc(l)}">${esc(l)}</span><div class="track"><i style="width:${(n / maxP) * 100}%"></i></div><span class="num">${n}</span></div>`).join('') : '<div class="empty">Sin fotos para estos filtros</div>'}</div>
-      </div>
-      <div class="card" style="margin-top:14px;overflow-x:auto"><h3>Cobertura por tipo</h3>${pdvs.length ? `<table><tr><th>Punto de venta</th>${C.TIPOS.map((t) => `<th class="c">${esc(t.nombre)}</th>`).join('')}</tr>${pdvs.map((p) => `<tr><td>${esc(p)}</td>${C.TIPOS.map((t) => { const n = celda(p, t); return `<td class="c"><span class="dot ${n ? 'si' : 'no'}">${n || '–'}</span></td>`; }).join('')}</tr>`).join('')}</table>` : '<div class="empty">Sin puntos de venta</div>'}</div>
-      <h2 style="margin-top:22px">Galería</h2>
-      <div class="galeria">${lista.length ? lista.map((x, i) => `<button class="g-item" data-g="${i}"><img src="${esc(x.thumb || x.url)}" loading="lazy" alt=""><div><b>${esc(x.pdv)}</b><small>${esc(x.tipo)} · ${esc(x.relevador)}</small><small class="num">${fmtFecha(x.ts)}${x.pendiente ? ' · por subir' : ''}</small><div class="tags">${tags(x)}</div></div></button>`).join('') : '<div class="empty">Aún no hay fotos</div>'}</div>
-    </div>`;
+    // ── Indicadores ──
+    const n = lista.length, c = cnt(lista, 'cumple'), p = cnt(lista, 'parcial'), nc = cnt(lista, 'no_cumple'), sin = n - c - p - nc;
+    const conRes = c + p + nc, pctCumple = pct(c, conRes);
+    const pdvsAll = [...new Set([...nombresPdv(), ...lista.map((x) => x.pdv)])].sort((a, b) => a.localeCompare(b));
+    const kpi = (cls, icono, titulo, valor, extra) => `<div class="k-card"><div class="k-top"><span>${titulo}</span><i class="k-ico ${cls}">${svg(icono, 18)}</i></div><div class="k-row"><div class="k-val">${valor}</div>${extra || ''}</div></div>`;
 
-    $app.querySelectorAll('[data-f]').forEach((el) => el.onchange = () => { f[el.dataset.f] = el.value; pintarTablero(); });
-    $app.querySelectorAll('[data-g]').forEach((b) => b.onclick = () => {
-      const x = lista[+b.dataset.g], t = tipoDe(x.tipo), ref = t ? planosDe(x.pdv, t.id)[0] : null;
-      lightbox([{ url: x.url, caption: `${x.relevador} · ${fmtFecha(x.ts)}`, tags: tags(x) }, ...(ref ? [{ url: ref.url, caption: 'Planograma de referencia' }] : [])]);
+    // ── Estado por punto de venta ──
+    const filasPdv = pdvsAll.map((nombre) => {
+      const it = lista.filter((x) => x.pdv === nombre), cc = cnt(it, 'cumple'), pp = cnt(it, 'parcial'), nn = cnt(it, 'no_cumple'), ss = it.length - cc - pp - nn;
+      return { nombre, n: it.length, cc, pp, nn, ss, pc: pct(cc, cc + pp + nn) };
     });
+    const orden = state.orden || 'mayor';
+    filasPdv.sort((a, b) => orden === 'az' ? a.nombre.localeCompare(b.nombre)
+      : orden === 'menor' ? (a.pc ?? 999) - (b.pc ?? 999) || a.nombre.localeCompare(b.nombre)
+      : (b.pc ?? -1) - (a.pc ?? -1) || a.nombre.localeCompare(b.nombre));
+    const tonoPct = (v) => (v === null ? 'mut' : v >= 80 ? 'ok' : v >= 50 ? 'warn' : 'bad');
+    const seg = (cls, v, tot) => (v ? `<i class="${cls}" style="width:${(v / tot) * 100}%"></i>` : '');
+
+    // ── Donut, hallazgos y zonas ──
+    const a1 = pct(c, n) || 0, a2 = a1 + (pct(p, n) || 0), a3 = a2 + (pct(nc, n) || 0);
+    const donut = n ? `conic-gradient(#22a447 0 ${a1}%, #d89b14 ${a1}% ${a2}%, #d64545 ${a2}% ${a3}%, #d5dcda ${a3}% 100%)` : '#e3e9e7';
+    const frec = INCID.map((id) => [id, tiene(lista, id)]).sort((a, b) => b[1] - a[1]);
+    const maxF = Math.max(1, ...frec.map((r) => r[1]));
+    const hallazgos = frec.reduce((a, r) => a + r[1], 0);
+    const zonas = C.TIPOS.map((t) => { const it = lista.filter((x) => x.tipo === t.nombre); return { t, n: it.length, pc: pct(cnt(it, 'cumple'), it.filter((x) => resDe(x)).length) }; });
+
+    // ── Evaluación: planograma vs foto auditada ──
+    const idx = Math.max(0, lista.findIndex((x) => x.id === state.sel));
+    const sel = lista[idx] || null;
+    let cmp = '<div class="empty">Aún no hay fotos para comparar con estos filtros.</div>', tituloEval = 'Evaluación de góndola';
+    if (sel) {
+      const t = tipoDe(sel.tipo), ref = t ? planosDe(sel.pdv, t.id)[0] : null, r = resDe(sel), crit = sel.criterios || [];
+      const inc = crit.filter((id) => INCID.includes(id)), acc = crit.filter((id) => ACCION.includes(id));
+      tituloEval = `Evaluación de góndola · ${esc(sel.pdv)}`;
+      const resChip = r ? `<span class="chip res ${criterioDe(r).tono}">${svg(r === 'cumple' ? 'cumple' : r === 'parcial' ? 'warn' : 'bad', 15)}${esc(criterioDe(r).texto)}</span>` : '<span class="chip gry">Sin resultado registrado</span>';
+      const chipInc = (id) => `<span class="chip ${crit.includes(id) ? (GRAVE.includes(id) ? 'red' : 'org') : 'gry'}">${esc(criterioDe(id).texto)}</span>`;
+      const chipAcc = (id) => `<span class="chip ${crit.includes(id) ? (id === 'corregido' ? 'grn' : 'org') : 'gry'}">${crit.includes(id) ? '<i class="pt"></i>' : ''}${esc(criterioDe(id).texto)}</span>`;
+      const resumen = `${sel.tipo} en ${sel.pdv}: ${r ? criterioDe(r).texto.toLowerCase() : 'sin resultado registrado'}. ` +
+        (inc.length ? `Se registraron ${inc.length} incidencia${inc.length > 1 ? 's' : ''}: ${inc.map((id) => criterioDe(id).texto.toLowerCase()).join('; ')}.` : 'No se registraron incidencias.') +
+        (acc.length ? ` En la visita: ${acc.map((id) => criterioDe(id).texto.toLowerCase()).join('; ')}.` : '');
+      cmp = `<div class="cmp-bar"><label class="cmp-sel"><span>Foto auditada</span><select id="selfoto">${lista.map((x, i) => `<option value="${esc(x.id)}" ${i === idx ? 'selected' : ''}>${esc(x.pdv)} · ${esc(x.tipo)} · ${fmtFecha(x.ts)}</option>`).join('')}</select></label>
+          <div class="cmp-nav"><button class="ic-btn" id="prev" ${idx === 0 ? 'disabled' : ''} aria-label="Anterior">‹</button><span>${idx + 1} / ${lista.length}</span><button class="ic-btn" id="next" ${idx === lista.length - 1 ? 'disabled' : ''} aria-label="Siguiente">›</button></div></div>
+        <div class="cmp-t"><span>Comparativa visual</span></div>
+        <div class="cmp">
+          <div class="cmp-c"><div class="cmp-l">Planograma ideal</div><div class="cmp-f">${ref ? `<img src="${esc(ref.url)}" alt="Planograma ideal" data-z="${esc(ref.url)}">` : '<div class="cmp-vacio">Sin planograma de referencia para esta zona</div>'}</div><small>${esc(sel.tipo)} · ${ref && ref.pdv !== '*' ? esc(ref.pdv) : 'Planograma general'}</small></div>
+          <div class="cmp-arrow" aria-hidden="true"><span class="line"></span><i>→</i><span class="line"></span></div>
+          <div class="cmp-c"><div class="cmp-l">Foto auditada</div><div class="cmp-f"><img src="${esc(sel.url)}" alt="Foto auditada" data-z="${esc(sel.url)}"></div><small>${esc(sel.pdv)} · ${fmtFecha(sel.ts)}</small></div>
+        </div>
+        <div class="cmp-t"><span>Análisis de cumplimiento</span></div>
+        <div class="an">
+          <div class="an-a"><div class="an-l">Resultado de visita</div>${resChip}<p class="an-s">Relevó ${esc(sel.relevador)}</p>
+            <div class="an-l sp">Acciones y ajustes</div><div class="chips">${ACCION.map(chipAcc).join('')}</div></div>
+          <div class="an-b"><div class="an-l">Hallazgos detectados</div><div class="chips">${INCID.map(chipInc).join('')}</div></div>
+          <div class="an-c"><div class="an-l">Resumen del relevamiento</div><div class="an-box">${esc(resumen)}</div></div>
+        </div>`;
+    }
+
+    const select = (k, label, vals) => `<label class="f-sel"><span>${label}</span><select data-f="${k}"><option value="">Todos</option>${vals.map((v) => `<option ${f[k] === v ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label>`;
+    const per = (id, txt) => `<button class="seg-b ${state.periodo === id ? 'on' : ''}" data-p="${id}">${txt}</button>`;
+    const nav = (id, ic, txt) => `<button class="nav-b" data-go="${id}">${svg(ic, 19)}<span>${txt}</span></button>`;
+
+    $app.innerHTML = `<div class="dash-app">
+      <aside class="side"><div class="side-brand"><img src="img/logo-masmarka.png" alt="+MARKA"><small>Tablero operativo</small></div>
+        <div class="side-sec">Principal</div>${nav('s-resumen', 'grid', 'Resumen')}${nav('s-cmp', 'cmp', 'Evaluación')}${nav('s-pdv', 'pin', 'Puntos de venta')}${nav('s-gal', 'img', 'Galería')}
+        <div class="side-pie"><div class="side-user"><i>PF</i><div><b>Profarco S.A.</b><small>Vista de cliente</small></div></div><button class="nav-b" id="salir">${svg('out', 19)}<span>Cerrar sesión</span></button></div></aside>
+      <div class="main">
+        <header class="bar"><div class="crumb">Profarco <span>/</span> Principal <span>/</span> <b>Auditoría de góndolas</b></div>
+          <div class="bar-r"><div class="seg">${per('hoy', 'Hoy')}${per('mes', 'Este mes')}${per('todo', 'Todo')}</div>
+            <button class="btn-o" id="csv">${svg('down', 17)}Exportar</button></div></header>
+        <div class="content">
+          <section id="s-resumen"><h1>Auditoría de góndolas</h1><p class="sub">Evaluación de cumplimiento de planogramas y análisis de puntos de venta.</p>
+            <div class="filt">${select('pdv', 'Punto de venta', opt('pdv'))}${select('tipo', 'Zona', C.TIPOS.map((t) => t.nombre))}${select('relevador', 'Relevador', opt('relevador'))}
+              <label class="f-sel"><span>Observación</span><select data-f="criterio"><option value="">Todas</option>${C.CRITERIOS.map((cr) => `<option value="${cr.id}" ${f.criterio === cr.id ? 'selected' : ''}>${esc(cr.texto)}</option>`).join('')}</select></label>
+              <label class="f-sel"><span>Desde</span><input type="date" data-f="desde" value="${f.desde}"></label><label class="f-sel"><span>Hasta</span><input type="date" data-f="hasta" value="${f.hasta}"></label></div>
+            <div class="k-grid">
+              ${kpi('az', 'foto', 'Góndolas auditadas', n)}
+              ${kpi('ok', 'cumple', 'Cumplimiento general', pctCumple === null ? '–' : pctCumple + '%', pctCumple === null ? '' : `<div class="k-bar"><b class="ok" style="width:${pctCumple}%"></b></div>`)}
+              ${kpi('bad', 'warn', 'Quiebres de stock', tiene(lista, 'faltan_productos'))}
+              ${kpi('warn', 'warn', 'Material POP faltante', tiene(lista, 'sin_pop'))}
+            </div></section>
+          <section class="panel" id="s-cmp"><div class="p-head"><i class="k-ico az">${svg('cmp', 18)}</i><div><h2>${tituloEval}</h2></div></div>${cmp}</section>
+          <section class="panel" id="s-pdv"><div class="p-head"><i class="k-ico ok">${svg('pin', 18)}</i><div><h2>Estado de góndolas por punto de venta</h2><p>La barra muestra el resultado de las fotos de cada punto de venta.</p></div>
+              <div class="seg sm"><button class="seg-b ${orden === 'mayor' ? 'on' : ''}" data-o="mayor">Mayor ↓</button><button class="seg-b ${orden === 'menor' ? 'on' : ''}" data-o="menor">Menor ↑</button><button class="seg-b ${orden === 'az' ? 'on' : ''}" data-o="az">A–Z</button></div></div>
+            <div class="leyenda"><span><i class="ok"></i>Cumple</span><span><i class="warn"></i>Parcial</span><span><i class="bad"></i>No cumple</span><span><i class="mut"></i>Sin resultado</span></div>
+            ${filasPdv.length ? filasPdv.map((r) => `<div class="pdv-row"><div class="pdv-n"><b>${esc(r.nombre)}</b><small>${r.n ? `${r.n} foto${r.n > 1 ? 's' : ''}` : 'Sin relevar'}</small></div>
+              <div class="pdv-bar">${r.n ? seg('ok', r.cc, r.n) + seg('warn', r.pp, r.n) + seg('bad', r.nn, r.n) + seg('mut', r.ss, r.n) : ''}</div>
+              <div class="pdv-p ${tonoPct(r.pc)}">${r.pc === null ? '–' : r.pc + '%'}<small>${r.cc} de ${r.cc + r.pp + r.nn}</small></div></div>`).join('') : '<div class="empty">Sin puntos de venta</div>'}</section>
+          <div class="trio">
+            <section class="panel"><div class="p-head"><div><h2>Resultado general</h2><p>${n} fotos relevadas</p></div></div>
+              <div class="donut-w"><div class="donut" style="background:${donut}"><div><b>${pctCumple === null ? '–' : pctCumple + '%'}</b><small>cumple</small></div></div>
+                <ul class="d-leg"><li><i class="ok"></i>Cumple<b>${c}</b></li><li><i class="warn"></i>Parcial<b>${p}</b></li><li><i class="bad"></i>No cumple<b>${nc}</b></li><li><i class="mut"></i>Sin resultado<b>${sin}</b></li></ul></div></section>
+            <section class="panel"><div class="p-head"><div><h2>Hallazgos más frecuentes</h2><p>Incidencias registradas por los relevadores</p></div></div>
+              ${hallazgos ? frec.map(([id, v]) => `<div class="fr-row"><span>${esc(criterioDe(id).texto)}</span><div class="fr-t"><i style="width:${(v / maxF) * 100}%"></i></div><b>${v}</b></div>`).join('') : '<div class="empty">Sin incidencias registradas</div>'}</section>
+            <section class="panel"><div class="p-head"><div><h2>Cobertura por zona</h2><p>Fotos y cumplimiento por tipo de relevamiento</p></div></div>
+              ${zonas.map((z) => `<div class="zn-row"><span>${esc(z.t.nombre)}</span><b>${z.n}</b><em class="${tonoPct(z.pc)}">${z.pc === null ? '–' : z.pc + '%'}</em></div>`).join('')}</section>
+          </div>
+          <section class="panel" id="s-gal"><div class="p-head"><i class="k-ico mut">${svg('img', 18)}</i><div><h2>Galería</h2><p>Toca una foto para compararla con su planograma.</p></div></div>
+            <div class="galeria">${lista.length ? lista.map((x) => `<button class="g-item ${sel && x.id === sel.id ? 'on' : ''}" data-g="${esc(x.id)}"><img src="${esc(x.thumb || x.url)}" loading="lazy" alt=""><div><b>${esc(x.pdv)}</b><small>${esc(x.tipo)} · ${esc(x.relevador)}</small><small class="num">${fmtFecha(x.ts)}${x.pendiente ? ' · por subir' : ''}</small><div class="tags">${tags(x)}</div></div></button>`).join('') : '<div class="empty">Aún no hay fotos</div>'}</div></section>
+        </div></div></div>`;
+
+    $app.querySelectorAll('[data-f]').forEach((el) => el.onchange = () => { f[el.dataset.f] = el.value; if (el.dataset.f === 'desde' || el.dataset.f === 'hasta') state.periodo = ''; pintarTablero(); });
+    $app.querySelectorAll('[data-p]').forEach((b) => b.onclick = () => {
+      state.periodo = b.dataset.p;
+      f.desde = b.dataset.p === 'hoy' ? hoy : b.dataset.p === 'mes' ? hoy.slice(0, 8) + '01' : '';
+      f.hasta = b.dataset.p === 'hoy' ? hoy : '';
+      pintarTablero();
+    });
+    $app.querySelectorAll('[data-o]').forEach((b) => b.onclick = () => { state.orden = b.dataset.o; pintarTablero(); });
+    $app.querySelectorAll('[data-go]').forEach((b) => b.onclick = () => document.getElementById(b.dataset.go)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    $app.querySelectorAll('[data-g]').forEach((b) => b.onclick = () => { state.sel = b.dataset.g; pintarTablero(); document.getElementById('s-cmp').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+    $app.querySelectorAll('[data-z]').forEach((im) => im.onclick = () => lightbox([{ url: im.dataset.z }]));
+    const sf = document.getElementById('selfoto'); if (sf) sf.onchange = () => { state.sel = sf.value; pintarTablero(); };
+    const ir = (d) => { state.sel = lista[idx + d].id; pintarTablero(); };
+    if (document.getElementById('prev')) document.getElementById('prev').onclick = () => ir(-1);
+    if (document.getElementById('next')) document.getElementById('next').onclick = () => ir(1);
+    document.getElementById('salir').onclick = () => { localStorage.removeItem('pin-tablero'); sessionStorage.removeItem('pin-tablero'); location.reload(); };
     document.getElementById('csv').onclick = () => {
       const filas = [['Fecha', 'Punto de venta', 'Tipo', 'Relevador', 'Observaciones', 'Enlace'],
         ...lista.map((x) => [new Date(x.ts).toISOString(), x.pdv, x.tipo, x.relevador, (x.criterios || []).map((id) => criterioDe(id).texto).join('; '), x.pendiente ? '(por subir)' : x.url])];
-      const csv = '﻿' + filas.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const csv = '﻿' + filas.map((r) => r.map((cc) => `"${String(cc).replace(/"/g, '""')}"`).join(',')).join('\n');
       Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })), download: `fotos-gondola-${diaISO(Date.now())}.csv` }).click();
     };
   }
