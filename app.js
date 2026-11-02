@@ -45,10 +45,12 @@
     tab: { desde: '', hasta: '', pdv: '', relevador: '', tipo: '', criterio: '' },
     datos: null,
   };
+  // Drive no admite "/" en nombres de carpeta: el receptor guarda "Islas - Exhibidores".
+  const mismoTipo = (a, b) => String(a).replace(/[\\/:*?"<>|]/g, '-').trim() === String(b).replace(/[\\/:*?"<>|]/g, '-').trim();
   const planosDe = (pdv, tipo) => {
     const t = tipoDe(tipo).nombre;
-    const exactos = state.planos.filter((p) => p.pdv === pdv && p.tipo === t);
-    return exactos.length ? exactos : state.planos.filter((p) => p.pdv === '*' && p.tipo === t);
+    const exactos = state.planos.filter((p) => p.pdv === pdv && mismoTipo(p.tipo, t));
+    return exactos.length ? exactos : state.planos.filter((p) => p.pdv === '*' && mismoTipo(p.tipo, t));
   };
   const nombresPdv = () => [...new Set([...state.pdvs.map((p) => p.nombre), ...state.planos.map((p) => p.pdv).filter((n) => n !== '*')])].sort((a, b) => a.localeCompare(b));
 
@@ -325,7 +327,7 @@
         <p class="muted" style="font-size:13px">Si un punto de venta no tiene planograma propio, se muestra el general de ese tipo.</p>
       </div>
       ${grupos.map((p) => `<div class="card" style="margin-top:14px"><h3>${esc(etiqueta(p))}</h3>${C.TIPOS.map((t) => {
-        const ps = state.planos.filter((x) => x.pdv === p && x.tipo === t.nombre);
+        const ps = state.planos.filter((x) => x.pdv === p && mismoTipo(x.tipo, t.nombre));
         return ps.length ? `<div class="label" style="margin-top:12px">${esc(t.nombre)}</div><div class="plano-grid">${ps.map((x) => `<div class="foto"><img src="${esc(x.url)}" alt="" data-ver="${esc(x.url)}"><button class="x" data-borrar="${esc(x.id)}" aria-label="Borrar">×</button></div>`).join('')}</div>` : '';
       }).join('')}</div>`).join('')}
     </div>`;
