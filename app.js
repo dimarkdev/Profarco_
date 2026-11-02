@@ -150,7 +150,8 @@
   }
 
   // Ventana "Planograma de Referencia": hay que verla completa para poder abrir la camara.
-  function abrirReferencia() {
+  async function abrirReferencia() {
+    if (!state.planosListo && !state.planos.length) { toast('Cargando planogramas…'); await state.planosP; }
     const ps = planosDe(state.pdv, state.marca, state.tipo.id);
     let i = 0; const vistas = new Set([0]);
     const m = document.createElement('div');
@@ -194,8 +195,8 @@
     let stream = null;
     const parar = () => stream?.getTracks().forEach((t) => t.stop());
     const salir = () => { parar(); el.remove(); };
-    const actualizar = () => { const b = q('[data-listo]'); b.classList.toggle('hide', !state.fotos.length); b.textContent = `Listo · ${state.fotos.length}`; };
-    const agregar = (blob) => { state.fotos.push({ blob, url: URL.createObjectURL(blob) }); actualizar(); const f = q('.flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); };
+    const actualizar = () => { const b = q('[data-listo]'); b.classList.toggle('hide', !state.fotos.length); b.textContent = `Listo · ${state.fotos.length}/${C.MAX_FOTOS}`; q('[data-disp]').classList.toggle('lleno', state.fotos.length >= C.MAX_FOTOS); };
+    const agregar = (blob) => { if (state.fotos.length >= C.MAX_FOTOS) { toast(`Máximo ${C.MAX_FOTOS} fotos por relevamiento`); return; } state.fotos.push({ blob, url: URL.createObjectURL(blob) }); actualizar(); const f = q('.flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); };
 
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error('sin getUserMedia');
@@ -236,7 +237,7 @@
       <div class="thumbs">${state.fotos.map((f, i) => `<div class="foto"><img src="${esc(f.url)}" alt=""><button class="x" data-del="${i}" aria-label="Quitar">×</button></div>`).join('')}</div>
       ${visibles.map((q) => `<div class="preg"><h2>${q.numero ? q.numero + '. ' : ''}${esc(q.titulo)}</h2><p class="muted">${esc(q.nota)}</p>
         <div class="opts">${q.opciones.map((o) => `<button class="opt radio ${sel.has(o.id) ? 'on' : ''}" data-c="${o.id}"><span class="box"></span>${esc(o.texto)}</button>`).join('')}</div></div>`).join('')}
-      <div class="sticky-bar"><div class="row"><button class="btn" id="mas">+ Foto</button><button class="btn teal block" id="guardar" ${completo && state.fotos.length ? '' : 'disabled'}>Guardar relevamiento</button></div></div></div>`;
+      <div class="sticky-bar"><div class="row"><button class="btn" id="mas" ${state.fotos.length >= C.MAX_FOTOS ? 'disabled' : ''}>+ Foto</button><button class="btn teal block" id="guardar" ${completo && state.fotos.length ? '' : 'disabled'}>Guardar relevamiento</button></div></div></div>`;
     $app.querySelectorAll('[data-c]').forEach((b) => b.onclick = () => {
       const c = criterioDe(b.dataset.c);
       C.CRITERIOS.filter((x) => x.grupo === c.grupo).forEach((x) => sel.delete(x.id));   // una sola opcion por pregunta
@@ -508,6 +509,8 @@
         <label class="field"><span class="label">Tipo de espacio</span><select class="in" id="tipo">${C.TIPOS.map((t) => `<option ${t.nombre === admin.tipo ? 'selected' : ''}>${esc(t.nombre)}</option>`).join('')}</select></label>
         <label class="btn teal block" for="subir">Agregar imágenes</label><input type="file" id="subir" accept="image/*" multiple class="hide">
         <p class="muted" style="font-size:13px">Si un punto de venta no tiene planograma propio para esa marca y espacio, se muestra el general.</p>
+        <button class="btn sm" id="refrescar" type="button">Actualizar datos de relevadores y puntos de venta</button>
+        <p class="muted" style="font-size:12px">Los cambios en las planillas se ven en la app en unos 10 minutos. Este botón los aplica ya.</p>
       </div>
       ${grupos.map((q) => `<div class="card" style="margin-top:14px"><h3>${esc(etiqueta(q))}</h3>${C.MARCAS.map((m) => {
         const tipos = C.TIPOS.map((t) => [t, state.planos.filter((x) => x.pdv === q && mismoTipo(x.marca, m) && mismoTipo(x.tipo, t.nombre))]).filter((r) => r[1].length);
@@ -522,6 +525,7 @@
         state.planos = await S.planogramas(); toast('Planograma guardado'); vistaPlanogramas(pin);
       } catch (err) { toast(err.message); }
     };
+    document.getElementById('refrescar').onclick = async () => { try { await S.limpiarCache(pin); toast('Datos actualizados'); } catch (err) { toast(err.message); } };
     $app.querySelectorAll('[data-borrar]').forEach((b) => b.onclick = async () => {
       if (!confirm('¿Borrar esta imagen del planograma?')) return;
       try { await S.borrarPlanograma(b.dataset.borrar, pin); state.planos = await S.planogramas(); vistaPlanogramas(pin); } catch (err) { toast(err.message); }
@@ -547,9 +551,16 @@
   }
   async function iniciar() {
     const pagina = document.body.dataset.page;
-    try { state.planos = await S.planogramas(); }
-    catch (e) { toast('Sin conexión con Drive: ' + e.message); }
-    const conPdvs = (vista) => async (pin) => { try { state.pdvs = await S.puntosDeVenta(pin); } catch (e) { state.pdvs = []; } vista(pin); };
+    // La lista de planogramas tarda: se muestra la ultima conocida de inmediato y se actualiza por detras (la pantalla no la espera).
+    const previa = S.remoto ? guardado('cache-planos') : null;
+    if (previa) state.planos = previa;
+    state.planosListo = false;
+    state.planosP = S.planogramas().then((x) => { state.planos = x; state.planosListo = true; })
+      .catch((e) => { state.planosListo = true; if (!previa) toast('Sin conexión con Drive: ' + e.message); });
+    const conPdvs = (vista) => async (pin) => {
+      try { state.pdvs = await S.puntosDeVenta(pin); } catch (e) { state.pdvs = []; }
+      await state.planosP; vista(pin);
+    };
     if (pagina === 'tablero') conPin(conPdvs(vistaTablero), 'tablero');
     else if (pagina === 'admin') conPin(conPdvs(vistaPlanogramas), 'admin');
     else { pintarCampo(); refrescarUsuario(); }

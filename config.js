@@ -3,7 +3,7 @@
 window.CONFIG = {
   CLIENTE: 'Profarco',
   // URL de la aplicacion web de Apps Script (ver README.md).
-  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbzkaW6Tim-UZ4FHDtWdap2VdBljoEtc4EdAWxiVPgurk898c8FWiAEcRcqRc_SFb0GMRQ/exec',
+  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbyt7BQ2-MSAwCXo9bUyE5svclP8VdpO2JoOwLERf-HgzwhKgKAktUZjgCy1RkA3OEGlvg/exec',
   // Mismo valor que la propiedad TOKEN del Apps Script.
   TOKEN: 'profarco-k7Xq29mTw4vB8nZ3',
   // Solo modo prueba: PIN de administracion. Con Drive lo valida el script (ADMIN_PIN).
@@ -13,6 +13,8 @@ window.CONFIG = {
   // Fotos: lado mayor en px y calidad JPEG (0-1).
   FOTO_MAX_PX: 1600,
   FOTO_CALIDAD: 0.8,
+  // Maximo de fotos por relevamiento (un espacio de una marca).
+  MAX_FOTOS: 2,
 
   // Marcas que se relevan (el relevador elige una despues del punto de venta).
   MARCAS: ['Bauducco', 'Bettanin', 'Fini', 'Kellogg’s', 'M&M’s', 'Nosotras', 'Pedigree', 'Panasonic', 'Broterra',

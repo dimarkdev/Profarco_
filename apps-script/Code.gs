@@ -34,6 +34,20 @@ function planilla_(nombre) {
   }
   throw new Error('Falta la planilla "' + nombre + '". Archivos vistos: ' + (vistos.slice(0, 20).join(' | ') || 'ninguno'));
 }
+// ── Cache: abrir carpetas y planillas de Drive tarda segundos, asi que se guardan resultados en memoria temporal. ──
+// Las planillas Relevadores / Puntos de venta se releen cada 10 min (o al pulsar "Actualizar datos" en admin);
+// la lista de planogramas se mantiene al dia sola al subir o borrar; las fotos del tablero se releen cada 2 min.
+const CACHE_PLANILLAS = 600, CACHE_PLANOS = 21600, CACHE_FOTOS = 120;
+function cacheGet_(k) { try { const v = CacheService.getScriptCache().get(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
+function cachePut_(k, v, seg) { try { const s = JSON.stringify(v); if (s.length < 90000) CacheService.getScriptCache().put(k, s, seg); } catch (e) {} }
+function cacheDel_(claves) { try { CacheService.getScriptCache().removeAll(claves); } catch (e) {} }
+function planillaId_(nombre) {   // el id de cada planilla no cambia: evita recorrer carpetas en cada llamada
+  const k = 'id_' + nombre.toLowerCase(), c = CacheService.getScriptCache().get(k);
+  if (c) return c;
+  const id = planilla_(nombre).getId();
+  CacheService.getScriptCache().put(k, id, CACHE_PLANOS);
+  return id;
+}
 const ENCABEZADO_REGISTRO = ['Fecha y hora', 'Timestamp', 'CI', 'Relevador', 'Punto de venta', 'Marca', 'Tipo de espacio', 'Cumplimiento', 'Observaciones', 'ID foto', 'Criterios (ids)'];
 const RESULTADOS = { cumple: 'Cumple', parcial: 'Cumple parcialmente', no_cumple: 'No cumple' };
 const TEXTOS = {
@@ -69,14 +83,23 @@ function activo_(v) { return ['no', 'n', '0', 'false', 'inactivo'].indexOf(Strin
 
 // Filas de una planilla de Maestros (sin el encabezado).
 function filas_(nombre) {
-  const v = SpreadsheetApp.open(planilla_(nombre)).getSheets()[0].getDataRange().getValues();
-  return v.slice(1).filter(function (r) { return String(r[0]).trim() !== ''; });
+  const k = 'filas_' + nombre.toLowerCase(), c = cacheGet_(k);
+  if (c) return c;
+  const v = SpreadsheetApp.openById(planillaId_(nombre)).getSheets()[0].getDataRange().getValues();
+  const filas = v.slice(1).filter(function (r) { return String(r[0]).trim() !== ''; });
+  cachePut_(k, filas, CACHE_PLANILLAS);
+  return filas;
+}
+function planos_() {
+  let p = cacheGet_('planos');
+  if (!p) { p = listarPlanos_(); cachePut_('planos', p, CACHE_PLANOS); }
+  return p;
 }
 
 function doGet(e) {
   try {
     if (!tokenOk_(e.parameter.token)) return json_({ ok: false, error: 'Token incorrecto' });
-    if (e.parameter.action === 'planos') return json_({ ok: true, planos: listarPlanos_() });
+    if (e.parameter.action === 'planos') return json_({ ok: true, planos: planos_() });
     return json_({ ok: false, error: 'Accion desconocida' });
   } catch (err) { return json_({ ok: false, error: String(err) }); }
 }
@@ -105,13 +128,21 @@ function doPost(e) {
     // Lo siguiente (planogramas) es solo de administracion.
     if (!chequeo_(pinOk_(b.pin))) return json_({ ok: false, error: 'PIN incorrecto' });
     if (b.action === 'pin') return json_({ ok: true });
+    if (b.action === 'limpiarCache') { cacheDel_(['filas_relevadores', 'filas_puntos de venta', 'fotos', 'planos', 'id_relevadores', 'id_puntos de venta', 'id_registro de fotos']); return json_({ ok: true }); }
     if (b.action === 'planograma') {
       const carpeta = sub_(sub_(sub_(carpeta_(PLANOS), b.pdv === '*' ? '_General' : limpio_(b.pdv)), limpio_(b.marca)), limpio_(b.tipo));
       const f = carpeta.createFile(Utilities.newBlob(Utilities.base64Decode(b.data), 'image/jpeg', limpio_(b.nombre)));
       f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      const lista = cacheGet_('planos');   // se agrega a la lista guardada, sin volver a recorrer Drive
+      if (lista) { lista.push({ id: f.getId(), pdv: b.pdv === '*' ? '*' : limpio_(b.pdv), marca: limpio_(b.marca), tipo: limpio_(b.tipo), nombre: f.getName(), url: 'https://drive.google.com/thumbnail?id=' + f.getId() + '&sz=w1200' }); cachePut_('planos', lista, CACHE_PLANOS); }
       return json_({ ok: true, id: f.getId() });
     }
-    if (b.action === 'borrarPlanograma') { DriveApp.getFileById(b.id).setTrashed(true); return json_({ ok: true }); }
+    if (b.action === 'borrarPlanograma') {
+      DriveApp.getFileById(b.id).setTrashed(true);
+      const lista = cacheGet_('planos');
+      if (lista) cachePut_('planos', lista.filter(function (x) { return x.id !== b.id; }), CACHE_PLANOS);
+      return json_({ ok: true });
+    }
     return json_({ ok: false, error: 'Accion desconocida' });
   } catch (err) { return json_({ ok: false, error: String(err) }); }
 }
@@ -129,17 +160,20 @@ function guardarFoto_(b) {
   const obs = crit.filter(function (c) { return !RESULTADOS[c]; }).map(function (c) { return TEXTOS[c] || c; }).join('; ');
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
   try {
-    const hoja = SpreadsheetApp.open(planilla_('Registro de fotos')).getSheets()[0];
+    const hoja = SpreadsheetApp.openById(planillaId_('Registro de fotos')).getSheets()[0];
     if (hoja.getLastRow() < 1 || hoja.getLastColumn() < ENCABEZADO_REGISTRO.length) hoja.getRange(1, 1, 1, ENCABEZADO_REGISTRO.length).setValues([ENCABEZADO_REGISTRO]);
     hoja.appendRow([Utilities.formatDate(new Date(b.ts), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm'), b.ts, "'" + digitos_(b.ci), b.relevador, b.pdv, b.marca || '', b.tipo, res, obs, f.getId(), crit.join('|')]);
   } finally { lock.releaseLock(); }
+  cacheDel_(['fotos']);
   return f.getId();
 }
 
 function listarFotos_() {
-  let f; try { f = planilla_('Registro de fotos'); } catch (e) { return []; }
-  const v = SpreadsheetApp.open(f).getSheets()[0].getDataRange().getValues().slice(1);
-  return v.filter(function (r) { return r[9]; }).map(function (r) {
+  const c = cacheGet_('fotos');
+  if (c) return c;
+  let id; try { id = planillaId_('Registro de fotos'); } catch (e) { return []; }
+  const v = SpreadsheetApp.openById(id).getSheets()[0].getDataRange().getValues().slice(1);
+  const out = v.filter(function (r) { return r[9]; }).map(function (r) {
     return {
       id: r[9], ts: Number(r[1]), relevador: r[3], pdv: r[4], marca: r[5], tipo: r[6],
       criterios: String(r[10] || '').split('|').filter(String),
@@ -147,6 +181,8 @@ function listarFotos_() {
       thumb: 'https://drive.google.com/thumbnail?id=' + r[9] + '&sz=w400',
     };
   });
+  cachePut_('fotos', out, CACHE_FOTOS);
+  return out;
 }
 
 function listarPlanos_() {   // 01_Planogramas/<punto de venta|_General>/<marca>/<tipo de espacio>/imagenes

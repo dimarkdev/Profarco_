@@ -130,6 +130,7 @@
       if (pin !== C.ADMIN_PIN_PRUEBA) throw new Error('PIN incorrecto');
       return DB.put('planos', { id: uid(), pdv, marca, tipo, nombre: file.name, blob });
     },
+    async limpiarCache(pin) { if (REMOTO) await post({ action: 'limpiarCache', pin }); },
     async borrarPlanograma(id, pin) {
       if (REMOTO) return post({ action: 'borrarPlanograma', pin, id });
       if (pin !== C.ADMIN_PIN_PRUEBA) throw new Error('PIN incorrecto');
