@@ -89,9 +89,13 @@
     async login(ci) {
       ci = soloDigitos(ci);
       if (!ci) throw new Error('Escribe tu número de CI');
-      if (REMOTO) return (await post({ action: 'login', ci })).nombre;
+      const NO_ENCONTRADA = 'Cédula no encontrada, verifique o reporte con soporte';
+      if (REMOTO) {
+        try { return (await post({ action: 'login', ci })).nombre; }
+        catch (e) { throw new Error(/no registrado/i.test(e.message) ? NO_ENCONTRADA : e.message); }
+      }
       const r = PRUEBA.relevadores.find((x) => x.ci === ci);
-      if (!r) throw new Error('CI no registrado. En modo prueba usa 1234567');
+      if (!r) throw new Error(NO_ENCONTRADA);
       return r.nombre;
     },
     async puntosDeVenta() {

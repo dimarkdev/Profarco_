@@ -218,6 +218,8 @@ td.c, th.c { text-align: center; }
 .lb { position: fixed; inset: 0; background: rgba(8,16,30,.94); z-index: 60; display: flex; flex-direction: column; }
 .lb-head { display: flex; align-items: center; gap: 12px; padding: calc(12px + env(safe-area-inset-top)) 16px 12px; color: #fff; }
 .lb-head .t { flex: 1; font-size: 13px; color: rgba(255,255,255,.75); }
+.lb-x { width: 44px; height: 44px; flex: none; border: 1px solid rgba(255,255,255,.35); border-radius: 50%; background: rgba(255,255,255,.18); color: #fff; font-size: 30px; line-height: 1; display: grid; place-items: center; padding-bottom: 3px; }
+.lb-x:hover, .lb-x:active { background: rgba(255,255,255,.32); }
 .lb-body { flex: 1; overflow: auto; display: flex; gap: 12px; padding: 0 12px 16px; align-items: center; justify-content: center; }
 .lb-body figure { flex: 1; min-width: 0; text-align: center; color: rgba(255,255,255,.75); font-size: 12.5px; }
 .lb-body img { max-width: 100%; max-height: calc(100vh - 170px); object-fit: contain; border-radius: var(--r-sm); }
@@ -256,3 +258,8 @@ body[data-page="campo"]::before {
 .login-body .btn + .btn { margin-top: 10px; }
 .login-body .hola { margin-top: 14px; margin-bottom: 14px; background: rgba(255,255,255,.7); }
 .login-foot { margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--border); text-align: center; font-size: 11.5px; color: var(--text-3); }
+.login-logos { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 4px; }
+.login-logos .logo-pf { height: 30px; width: auto; }
+.login-logos .por { font-size: 10.5px; color: var(--text-3); letter-spacing: .04em; white-space: nowrap; }
+.login-logos .logo-mm { height: 20px; width: auto; filter: brightness(0); opacity: .85; }  /* logo blanco -> oscuro sobre fondo claro */
+.login-hint.err { color: var(--bad-fg); font-size: 12px; }

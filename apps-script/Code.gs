@@ -59,7 +59,7 @@ function doPost(e) {
     if (b.action === 'login') {   // devuelve solo el nombre de ese CI; la lista nunca sale completa
       const ci = digitos_(b.ci);
       const r = filas_('Relevadores').filter(function (x) { return digitos_(x[0]) === ci && activo_(x[2]); })[0];
-      return r && ci ? json_({ ok: true, nombre: String(r[1]).trim() }) : json_({ ok: false, error: 'CI no registrado. Consulta con tu supervisor.' });
+      return r && ci ? json_({ ok: true, nombre: String(r[1]).trim() }) : json_({ ok: false, error: 'CI no registrado' });
     }
     if (b.action === 'foto') return json_({ ok: true, id: guardarFoto_(b) });
 
