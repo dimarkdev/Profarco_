@@ -78,8 +78,7 @@
     const icoCi = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="9" cy="11" r="2"/><path d="M6.5 16c.5-1.5 4.5-1.5 5 0M14 10h4M14 13h3"/></svg>';
     $app.innerHTML = `<div class="login"><div class="login-card">
       <div class="login-head">
-        <div class="login-logos"><img class="logo-pf" src="img/logo-profarco.png" alt="Profarco S.A.">
-          <span class="por">Auditoría por</span><img class="logo-mm" src="img/logo-masmarka.png" alt="+Marka"></div>
+        <span class="por">Auditoría por</span><img class="logo-mm" src="img/logo-masmarka.png" alt="+Marka">
         <h1>Bienvenido</h1><p>Relevamiento de góndola</p></div>
       <div class="login-body">
         <label class="login-lab" for="ci">Número de cédula</label>
@@ -87,7 +86,7 @@
         ${confirmando ? `<div class="card hola"><div class="muted">Hola,</div><div class="nombre">${esc(confirmando.nombre)}</div><div class="muted">¿Eres tú?</div></div>
           <button class="btn teal block" id="si">Sí, continuar</button><button class="btn block" id="no">No soy yo</button>`
           : `<p class="login-hint" id="hint">Sin contraseña: solo tu número de cédula</p><button class="btn primary block" id="seguir">Ingresar</button>`}
-        <div class="login-foot">Relevamiento de góndola · Profarco</div>
+        <div class="login-foot"><img class="logo-pf" src="img/logo-profarco.png" alt="Profarco S.A."></div>
       </div></div></div>`;
     if (confirmando) {
       document.getElementById('si').onclick = () => { state.usuario = confirmando; localStorage.setItem('usuario', JSON.stringify(confirmando)); ir('pdv'); };
