@@ -7,6 +7,7 @@
   const fmtFecha = (ts) => new Date(ts).toLocaleString('es-PY', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
   const diaISO = (ts) => { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const tipoDe = (id) => C.TIPOS.find((t) => t.id === id || t.nombre === id);
+  const tiposDeMarca = (marca) => { const ids = C.ESPACIOS_POR_MARCA[marca]; return ids ? C.TIPOS.filter((t) => ids.includes(t.id)) : C.TIPOS; };
   const criterioDe = (id) => C.CRITERIOS.find((c) => c.id === id) || { id, texto: id };
   const guardado = (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
   const ICON_BACK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>';
@@ -142,7 +143,7 @@
     $app.innerHTML = `<div class="wrap"><h1>Tipo de espacio</h1><p class="lead">Selecciona el espacio a auditar</p>
       <div class="row" style="margin-top:22px"><button class="back" id="atras" aria-label="Volver">${ICON_BACK}</button><div class="sede">${esc(state.pdv)}</div></div>
       <div class="sede-sub"><span>${esc(state.marca)}</span></div>
-      <div class="tiles">${C.TIPOS.map((t) => `<button class="tile ${t.img ? '' : 'sin-img'}" data-t="${t.id}" style="background:${t.color}">${state.hechos.has(state.marca + '|' + t.id) ? '<span class="hecho">✓ Relevado</span>' : ''}${t.img ? `<img src="${t.img}" alt="">` : `<span class="tile-ico">${ico}</span>`}<b>${esc(t.nombre)}</b></button>`).join('')}</div>
+      <div class="tiles">${tiposDeMarca(state.marca).map((t) => `<button class="tile ${t.img ? '' : 'sin-img'}" data-t="${t.id}" style="background:${t.color}">${state.hechos.has(state.marca + '|' + t.id) ? '<span class="hecho">✓ Relevado</span>' : ''}${t.img ? `<img src="${t.img}" alt="">` : `<span class="tile-ico">${ico}</span>`}<b>${esc(t.nombre)}</b></button>`).join('')}</div>
       ${state.hechos.size ? '<button class="btn primary block" id="fin" style="margin-top:22px">Finalizar visita</button>' : ''}</div>`;
     document.getElementById('atras').onclick = () => ir('marca');
     document.getElementById('fin')?.addEventListener('click', () => { state.hechos = new Set(); ir('pdv'); });
@@ -506,7 +507,7 @@
       <div class="card stack" style="margin-top:16px">
         <label class="field"><span class="label">Punto de venta</span><select class="in" id="pdv"><option value="*" ${admin.pdv === '*' ? 'selected' : ''}>General (todos los puntos de venta)</option>${pdvs.map((q) => `<option ${q === admin.pdv ? 'selected' : ''}>${esc(q)}</option>`).join('')}</select></label>
         <label class="field"><span class="label">Marca</span><select class="in" id="marca">${C.MARCAS.map((m) => `<option ${m === admin.marca ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></label>
-        <label class="field"><span class="label">Tipo de espacio</span><select class="in" id="tipo">${C.TIPOS.map((t) => `<option ${t.nombre === admin.tipo ? 'selected' : ''}>${esc(t.nombre)}</option>`).join('')}</select></label>
+        <label class="field"><span class="label">Tipo de espacio</span><select class="in" id="tipo">${tiposDeMarca(admin.marca).map((t) => `<option ${t.nombre === admin.tipo ? 'selected' : ''}>${esc(t.nombre)}</option>`).join('')}</select></label>
         <label class="btn teal block" for="subir">Agregar imágenes</label><input type="file" id="subir" accept="image/*" multiple class="hide">
         <p class="muted" style="font-size:13px">Si un punto de venta no tiene planograma propio para esa marca y espacio, se muestra el general.</p>
         <button class="btn sm" id="refrescar" type="button">Actualizar datos de relevadores y puntos de venta</button>
@@ -518,6 +519,7 @@
       }).join('')}</div>`).join('')}
     </div>`;
     const lee = () => { admin.pdv = document.getElementById('pdv').value; admin.marca = document.getElementById('marca').value; admin.tipo = document.getElementById('tipo').value; };
+    document.getElementById('marca').onchange = () => { lee(); const t = tiposDeMarca(admin.marca); if (!t.some((x) => x.nombre === admin.tipo)) admin.tipo = t[0].nombre; vistaPlanogramas(pin); };
     document.getElementById('subir').onchange = async (e) => {
       lee();
       try {

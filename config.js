@@ -36,6 +36,28 @@ window.CONFIG = {
     { id: 'pedestal', nombre: 'Pedestal', color: '#3cc47f' },
   ],
 
+  // Tipos de espacio que tiene cada marca (por id): son los unicos que se ofrecen al relevar esa marca y al cargar sus planogramas.
+  // Una marca que no figura aqui muestra todos los tipos.
+  ESPACIOS_POR_MARCA: {
+    'Bauducco': ['puntera', 'pestana', 'exhibidor', 'isla'],
+    'Bettanin': ['puntera', 'exhibidor', 'bandeja_lateral'],
+    'Broterra': ['bandeja_lateral', 'enmarcado'],
+    'Bubbaloo': ['puntera_caja'],
+    'Fini': ['pestana', 'exhibidor', 'isla', 'ganchera', 'tramo_gondola', 'pedestal'],
+    'Halls': ['puntera_caja', 'exhibidor'],
+    'Invicta': ['exhibidor'],
+    'Kellogg’s': ['puntera', 'pestana', 'exhibidor', 'isla', 'portico', 'enmarcado'],
+    'M&M’s': ['puntera', 'puntera_caja', 'pestana_caja', 'isla', 'portico'],
+    'Nosotras': ['puntera', 'exhibidor', 'isla'],
+    'Panasonic': ['puntera_caja', 'pestana_caja', 'exhibidor'],
+    'Parmalat': ['pestana', 'bandeja_lateral'],
+    'Pedigree': ['puntera', 'pestana', 'exhibidor', 'isla'],
+    'Snickers': ['pestana'],
+    'Trident': ['puntera_caja', 'exhibidor'],
+    'Whiskas': ['puntera', 'exhibidor'],
+    'Zumuva': ['exhibidor'],
+  },
+
   // Preguntas del relevamiento (una sola opcion por pregunta). Se responden despues de tomar las fotos.
   // "si": la pregunta solo aparece cuando se eligio esa opcion. Los id se guardan en el registro: no los cambies una vez que haya datos.
   // "tono" (ok / warn / bad) lo usa el tablero para colorear la respuesta y contar hallazgos.
