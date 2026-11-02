@@ -303,6 +303,15 @@
       (!f.pdv || x.pdv === f.pdv) && (!f.relevador || x.relevador === f.relevador) && (!f.tipo || x.tipo === f.tipo) &&
       (!f.criterio || (x.criterios || []).includes(f.criterio))).sort((a, b) => b.ts - a.ts);
 
+    const visitas = [];
+    [...lista].sort((a, b) => a.ts - b.ts).forEach((x) => {
+      const v = visitas.find((q) => q.pdv === x.pdv && q.tipo === x.tipo && q.relevador === x.relevador && x.ts - q.fin <= 20 * 60 * 1000);
+      if (v) { v.fotos.push(x); v.fin = x.ts; v.criterios = [...new Set([...v.criterios, ...(x.criterios || [])])]; }
+      else visitas.push({ id: x.id, pdv: x.pdv, tipo: x.tipo, relevador: x.relevador, ts: x.ts, fin: x.ts, fotos: [x], criterios: [...(x.criterios || [])] });
+    });
+    visitas.sort((a, b) => b.ts - a.ts);
+    const V = visitas;
+
     const INCID = ['faltan_productos', 'mal_ubicado', 'sin_pop', 'sin_precio', 'competencia', 'sin_espacio'];
     const ACCION = ['corregido', 'no_modificar'];
     const GRAVE = ['faltan_productos', 'sin_precio'];   // se pintan en rojo; el resto de incidencias en naranja
@@ -328,14 +337,14 @@
     const tags = (x) => (x.criterios || []).map((id) => { const c = criterioDe(id); return `<span class="badge ${c.tono || ''}">${esc(c.texto)}</span>`; }).join('');
 
     // ── Indicadores ──
-    const n = lista.length, c = cnt(lista, 'cumple'), p = cnt(lista, 'parcial'), nc = cnt(lista, 'no_cumple'), sin = n - c - p - nc;
+    const n = V.length, c = cnt(V, 'cumple'), p = cnt(V, 'parcial'), nc = cnt(V, 'no_cumple'), sin = n - c - p - nc;
     const conRes = c + p + nc, pctCumple = pct(c, conRes);
     const pdvsAll = [...new Set([...nombresPdv(), ...lista.map((x) => x.pdv)])].sort((a, b) => a.localeCompare(b));
     const kpi = (cls, icono, titulo, valor, extra) => `<div class="k-card"><div class="k-top"><span>${titulo}</span><i class="k-ico ${cls}">${svg(icono, 18)}</i></div><div class="k-row"><div class="k-val">${valor}</div>${extra || ''}</div></div>`;
 
     // ── Estado por punto de venta ──
     const filasPdv = pdvsAll.map((nombre) => {
-      const it = lista.filter((x) => x.pdv === nombre), cc = cnt(it, 'cumple'), pp = cnt(it, 'parcial'), nn = cnt(it, 'no_cumple'), ss = it.length - cc - pp - nn;
+      const it = V.filter((x) => x.pdv === nombre), cc = cnt(it, 'cumple'), pp = cnt(it, 'parcial'), nn = cnt(it, 'no_cumple'), ss = it.length - cc - pp - nn;
       return { nombre, n: it.length, cc, pp, nn, ss, pc: pct(cc, cc + pp + nn) };
     });
     const orden = state.orden || 'mayor';
@@ -348,17 +357,20 @@
     // ── Donut, hallazgos y zonas ──
     const a1 = pct(c, n) || 0, a2 = a1 + (pct(p, n) || 0), a3 = a2 + (pct(nc, n) || 0);
     const donut = n ? `conic-gradient(#22a447 0 ${a1}%, #d89b14 ${a1}% ${a2}%, #d64545 ${a2}% ${a3}%, #d5dcda ${a3}% 100%)` : '#e3e9e7';
-    const frec = INCID.map((id) => [id, tiene(lista, id)]).sort((a, b) => b[1] - a[1]);
+    const frec = INCID.map((id) => [id, tiene(V, id)]).sort((a, b) => b[1] - a[1]);
     const maxF = Math.max(1, ...frec.map((r) => r[1]));
     const hallazgos = frec.reduce((a, r) => a + r[1], 0);
-    const zonas = C.TIPOS.map((t) => { const it = lista.filter((x) => x.tipo === t.nombre); return { t, n: it.length, pc: pct(cnt(it, 'cumple'), it.filter((x) => resDe(x)).length) }; });
+    const zonas = C.TIPOS.map((t) => { const it = V.filter((x) => x.tipo === t.nombre); return { t, n: it.length, pc: pct(cnt(it, 'cumple'), it.filter((x) => resDe(x)).length) }; });
 
     // ── Evaluación: planograma vs foto auditada ──
-    const idx = Math.max(0, lista.findIndex((x) => x.id === state.sel));
-    const sel = lista[idx] || null;
+    const idx = Math.max(0, V.findIndex((v) => v.fotos.some((x) => x.id === state.sel)));
+    const sel = V[idx] || null;
     let cmp = '<div class="empty">Aún no hay fotos para comparar con estos filtros.</div>', tituloEval = 'Evaluación de góndola';
+    const carData = {};
     if (sel) {
-      const t = tipoDe(sel.tipo), ref = t ? planosDe(sel.pdv, t.id)[0] : null, r = resDe(sel), crit = sel.criterios || [];
+      const t = tipoDe(sel.tipo), refs = t ? planosDe(sel.pdv, t.id) : [], r = resDe(sel), crit = sel.criterios || [];
+      const ini = Math.max(0, sel.fotos.findIndex((x) => x.id === state.sel));
+      carData.ref = refs.map((q) => q.url); carData.foto = sel.fotos.map((x) => x.url);
       const inc = crit.filter((id) => INCID.includes(id)), acc = crit.filter((id) => ACCION.includes(id));
       tituloEval = `Evaluación de góndola · ${esc(sel.pdv)}`;
       const resChip = r ? `<span class="chip res ${criterioDe(r).tono}">${svg(r === 'cumple' ? 'cumple' : r === 'parcial' ? 'warn' : 'bad', 15)}${esc(criterioDe(r).texto)}</span>` : '<span class="chip gry">Sin resultado registrado</span>';
@@ -367,13 +379,19 @@
       const resumen = `${sel.tipo} en ${sel.pdv}: ${r ? criterioDe(r).texto.toLowerCase() : 'sin resultado registrado'}. ` +
         (inc.length ? `Se registraron ${inc.length} incidencia${inc.length > 1 ? 's' : ''}: ${inc.map((id) => criterioDe(id).texto.toLowerCase()).join('; ')}.` : 'No se registraron incidencias.') +
         (acc.length ? ` En la visita: ${acc.map((id) => criterioDe(id).texto.toLowerCase()).join('; ')}.` : '');
-      cmp = `<div class="cmp-bar"><label class="cmp-sel"><span>Foto auditada</span><select id="selfoto">${lista.map((x, i) => `<option value="${esc(x.id)}" ${i === idx ? 'selected' : ''}>${esc(x.pdv)} · ${esc(x.tipo)} · ${fmtFecha(x.ts)}</option>`).join('')}</select></label>
-          <div class="cmp-nav"><button class="ic-btn" id="prev" ${idx === 0 ? 'disabled' : ''} aria-label="Anterior">‹</button><span>${idx + 1} / ${lista.length}</span><button class="ic-btn" id="next" ${idx === lista.length - 1 ? 'disabled' : ''} aria-label="Siguiente">›</button></div></div>
+      // Si hay mas de una imagen, al pasar el mouse aparece un degradado suave en los costados para cambiar de imagen.
+      const carro = (key, urls, alt, vacio, i0) => (urls.length
+        ? `<div class="cmp-f car" data-car="${key}"><img src="${esc(urls[i0])}" alt="${alt}" data-z="${esc(urls[i0])}">${urls.length > 1
+          ? `<button class="car-e l" data-d="-1" aria-label="Anterior">‹</button><button class="car-e r" data-d="1" aria-label="Siguiente">›</button><div class="car-d">${urls.map((_, k) => `<i class="${k === i0 ? 'on' : ''}"></i>`).join('')}</div>` : ''}</div>`
+        : `<div class="cmp-f"><div class="cmp-vacio">${vacio}</div></div>`);
+      const nF = sel.fotos.length;
+      cmp = `<div class="cmp-bar"><label class="cmp-sel"><span>Góndola auditada</span><select id="selfoto">${V.map((v, i) => `<option value="${esc(v.id)}" ${i === idx ? 'selected' : ''}>${esc(v.pdv)} · ${esc(v.tipo)} · ${fmtFecha(v.ts)}${v.fotos.length > 1 ? ` · ${v.fotos.length} fotos` : ''}</option>`).join('')}</select></label>
+          <div class="cmp-nav"><button class="ic-btn" id="prev" ${idx === 0 ? 'disabled' : ''} aria-label="Anterior">‹</button><span>${idx + 1} / ${V.length}</span><button class="ic-btn" id="next" ${idx === V.length - 1 ? 'disabled' : ''} aria-label="Siguiente">›</button></div></div>
         <div class="cmp-t"><span>Comparativa visual</span></div>
         <div class="cmp">
-          <div class="cmp-c"><div class="cmp-l">Planograma ideal</div><div class="cmp-f">${ref ? `<img src="${esc(ref.url)}" alt="Planograma ideal" data-z="${esc(ref.url)}">` : '<div class="cmp-vacio">Sin planograma de referencia para esta zona</div>'}</div><small>${esc(sel.tipo)} · ${ref && ref.pdv !== '*' ? esc(ref.pdv) : 'Planograma general'}</small></div>
+          <div class="cmp-c"><div class="cmp-l">Planograma ideal</div>${carro('ref', carData.ref, 'Planograma ideal', 'Sin planograma de referencia para esta zona', 0)}<small>${esc(sel.tipo)} · ${refs[0] && refs[0].pdv !== '*' ? esc(refs[0].pdv) : 'Planograma general'}${refs.length > 1 ? ` · ${refs.length} imágenes` : ''}</small></div>
           <div class="cmp-arrow" aria-hidden="true"><span class="line"></span><i>→</i><span class="line"></span></div>
-          <div class="cmp-c"><div class="cmp-l">Foto auditada</div><div class="cmp-f"><img src="${esc(sel.url)}" alt="Foto auditada" data-z="${esc(sel.url)}"></div><small>${esc(sel.pdv)} · ${fmtFecha(sel.ts)}</small></div>
+          <div class="cmp-c"><div class="cmp-l">Foto auditada</div>${carro('foto', carData.foto, 'Foto auditada', 'Sin imagen', ini)}<small>${esc(sel.pdv)} · ${fmtFecha(sel.ts)}${nF > 1 ? ` · ${nF} fotos` : ''}</small></div>
         </div>
         <div class="cmp-t"><span>Análisis de cumplimiento</span></div>
         <div class="an">
@@ -404,27 +422,27 @@
             <div class="k-grid">
               ${kpi('az', 'foto', 'Góndolas auditadas', n)}
               ${kpi('ok', 'cumple', 'Cumplimiento general', pctCumple === null ? '–' : pctCumple + '%', pctCumple === null ? '' : `<div class="k-bar"><b class="ok" style="width:${pctCumple}%"></b></div>`)}
-              ${kpi('bad', 'warn', 'Quiebres de stock', tiene(lista, 'faltan_productos'))}
-              ${kpi('warn', 'warn', 'Material POP faltante', tiene(lista, 'sin_pop'))}
+              ${kpi('bad', 'warn', 'Quiebres de stock', tiene(V, 'faltan_productos'))}
+              ${kpi('warn', 'warn', 'Material POP faltante', tiene(V, 'sin_pop'))}
             </div></section>
           <section class="panel" id="s-cmp"><div class="p-head"><i class="k-ico az">${svg('cmp', 18)}</i><div><h2>${tituloEval}</h2></div></div>${cmp}</section>
           <section class="panel" id="s-pdv"><div class="p-head"><i class="k-ico ok">${svg('pin', 18)}</i><div><h2>Estado de góndolas por punto de venta</h2><p>La barra muestra el resultado de las fotos de cada punto de venta.</p></div>
               <div class="seg sm"><button class="seg-b ${orden === 'mayor' ? 'on' : ''}" data-o="mayor">Mayor ↓</button><button class="seg-b ${orden === 'menor' ? 'on' : ''}" data-o="menor">Menor ↑</button><button class="seg-b ${orden === 'az' ? 'on' : ''}" data-o="az">A–Z</button></div></div>
             <div class="leyenda"><span><i class="ok"></i>Cumple</span><span><i class="warn"></i>Parcial</span><span><i class="bad"></i>No cumple</span><span><i class="mut"></i>Sin resultado</span></div>
-            ${filasPdv.length ? filasPdv.map((r) => `<div class="pdv-row"><div class="pdv-n"><b>${esc(r.nombre)}</b><small>${r.n ? `${r.n} foto${r.n > 1 ? 's' : ''}` : 'Sin relevar'}</small></div>
+            ${filasPdv.length ? filasPdv.map((r) => `<div class="pdv-row"><div class="pdv-n"><b>${esc(r.nombre)}</b><small>${r.n ? `${r.n} góndola${r.n > 1 ? 's' : ''} auditada${r.n > 1 ? 's' : ''}` : 'Sin relevar'}</small></div>
               <div class="pdv-bar">${r.n ? seg('ok', r.cc, r.n) + seg('warn', r.pp, r.n) + seg('bad', r.nn, r.n) + seg('mut', r.ss, r.n) : ''}</div>
               <div class="pdv-p ${tonoPct(r.pc)}">${r.pc === null ? '–' : r.pc + '%'}<small>${r.cc} de ${r.cc + r.pp + r.nn}</small></div></div>`).join('') : '<div class="empty">Sin puntos de venta</div>'}</section>
           <div class="trio">
-            <section class="panel"><div class="p-head"><div><h2>Resultado general</h2><p>${n} fotos relevadas</p></div></div>
+            <section class="panel"><div class="p-head"><div><h2>Resultado general</h2><p>${n} góndola${n === 1 ? '' : 's'} auditada${n === 1 ? '' : 's'}</p></div></div>
               <div class="donut-w"><div class="donut" style="background:${donut}"><div><b>${pctCumple === null ? '–' : pctCumple + '%'}</b><small>cumple</small></div></div>
                 <ul class="d-leg"><li><i class="ok"></i>Cumple<b>${c}</b></li><li><i class="warn"></i>Parcial<b>${p}</b></li><li><i class="bad"></i>No cumple<b>${nc}</b></li><li><i class="mut"></i>Sin resultado<b>${sin}</b></li></ul></div></section>
             <section class="panel"><div class="p-head"><div><h2>Hallazgos más frecuentes</h2><p>Incidencias registradas por los relevadores</p></div></div>
               ${hallazgos ? frec.map(([id, v]) => `<div class="fr-row"><span>${esc(criterioDe(id).texto)}</span><div class="fr-t"><i style="width:${(v / maxF) * 100}%"></i></div><b>${v}</b></div>`).join('') : '<div class="empty">Sin incidencias registradas</div>'}</section>
-            <section class="panel"><div class="p-head"><div><h2>Cobertura por zona</h2><p>Fotos y cumplimiento por tipo de relevamiento</p></div></div>
+            <section class="panel"><div class="p-head"><div><h2>Cobertura por zona</h2><p>Góndolas auditadas y cumplimiento por tipo de relevamiento</p></div></div>
               ${zonas.map((z) => `<div class="zn-row"><span>${esc(z.t.nombre)}</span><b>${z.n}</b><em class="${tonoPct(z.pc)}">${z.pc === null ? '–' : z.pc + '%'}</em></div>`).join('')}</section>
           </div>
           <section class="panel" id="s-gal"><div class="p-head"><i class="k-ico mut">${svg('img', 18)}</i><div><h2>Galería</h2><p>Toca una foto para compararla con su planograma.</p></div></div>
-            <div class="galeria">${lista.length ? lista.map((x) => `<button class="g-item ${sel && x.id === sel.id ? 'on' : ''}" data-g="${esc(x.id)}"><img src="${esc(x.thumb || x.url)}" loading="lazy" alt=""><div><b>${esc(x.pdv)}</b><small>${esc(x.tipo)} · ${esc(x.relevador)}</small><small class="num">${fmtFecha(x.ts)}${x.pendiente ? ' · por subir' : ''}</small><div class="tags">${tags(x)}</div></div></button>`).join('') : '<div class="empty">Aún no hay fotos</div>'}</div></section>
+            <div class="galeria">${lista.length ? lista.map((x) => `<button class="g-item ${sel && sel.fotos.some((q) => q.id === x.id) ? 'on' : ''}" data-g="${esc(x.id)}"><img src="${esc(x.thumb || x.url)}" loading="lazy" alt=""><div><b>${esc(x.pdv)}</b><small>${esc(x.tipo)} · ${esc(x.relevador)}</small><small class="num">${fmtFecha(x.ts)}${x.pendiente ? ' · por subir' : ''}</small><div class="tags">${tags(x)}</div></div></button>`).join('') : '<div class="empty">Aún no hay fotos</div>'}</div></section>
         </div></div></div>`;
 
     $app.querySelectorAll('[data-f]').forEach((el) => el.onchange = () => { f[el.dataset.f] = el.value; if (el.dataset.f === 'desde' || el.dataset.f === 'hasta') state.periodo = ''; pintarTablero(); });
@@ -439,7 +457,16 @@
     $app.querySelectorAll('[data-g]').forEach((b) => b.onclick = () => { state.sel = b.dataset.g; pintarTablero(); document.getElementById('s-cmp').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
     $app.querySelectorAll('[data-z]').forEach((im) => im.onclick = () => lightbox([{ url: im.dataset.z }]));
     const sf = document.getElementById('selfoto'); if (sf) sf.onchange = () => { state.sel = sf.value; pintarTablero(); };
-    const ir = (d) => { state.sel = lista[idx + d].id; pintarTablero(); };
+    const ir = (d) => { state.sel = V[idx + d].id; pintarTablero(); };
+    $app.querySelectorAll('[data-car]').forEach((box) => {
+      const urls = carData[box.dataset.car]; let i = box.dataset.car === 'foto' ? Math.max(0, sel.fotos.findIndex((x) => x.id === state.sel)) : 0;
+      box.querySelectorAll('[data-d]').forEach((bt) => bt.onclick = (e) => {
+        e.stopPropagation();
+        i = (i + +bt.dataset.d + urls.length) % urls.length;
+        const im = box.querySelector('img'); im.src = urls[i]; im.dataset.z = urls[i];
+        box.querySelectorAll('.car-d i').forEach((d, k) => d.classList.toggle('on', k === i));
+      });
+    });
     if (document.getElementById('prev')) document.getElementById('prev').onclick = () => ir(-1);
     if (document.getElementById('next')) document.getElementById('next').onclick = () => ir(1);
     document.getElementById('salir').onclick = () => { localStorage.removeItem('pin-tablero'); sessionStorage.removeItem('pin-tablero'); location.reload(); };
