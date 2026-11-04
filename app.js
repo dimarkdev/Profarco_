@@ -295,7 +295,6 @@
         <label class="pin-lab" for="pin">Clave de acceso</label>
         <div class="pin-in">${icoLock}<input id="pin" type="password" autocomplete="off" placeholder="Ingresa tu clave"><button type="button" class="ojo" id="ojo" aria-label="Mostrar u ocultar clave">${icoOjo}</button></div>
         <label class="pin-rec"><input type="checkbox" id="rec" checked> Recordarme en este dispositivo</label>
-        <button type="button" class="pin-olv" id="olv">¿Olvidaste tu clave?</button>
         <p class="pin-err" id="err"></p>
         <button class="pin-btn" id="ok">Iniciar sesión <span aria-hidden="true">→</span></button>
       </div><p class="pin-foot">© 2026 +MARKA. Todos los derechos reservados.</p></div>`;
@@ -312,7 +311,6 @@
     };
     document.getElementById('ok').onclick = entrar;
     document.getElementById('pin').onkeydown = (e) => { if (e.key === 'Enter') entrar(); };
-    document.getElementById('olv').onclick = () => { document.getElementById('err').textContent = 'Solicita tu clave al equipo de +MARKA.'; };
     document.getElementById('ojo').onclick = () => { const i = document.getElementById('pin'); i.type = i.type === 'password' ? 'text' : 'password'; };
   }
 
