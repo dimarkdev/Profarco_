@@ -63,10 +63,10 @@ button { cursor: pointer; }
 /* ── Estructura ── */
 .wrap { max-width: 560px; margin: 0 auto; padding: 28px 18px 60px; }
 .wrap.wide { max-width: 1180px; padding-top: 18px; }
-h1 { font-size: 1.76rem; line-height: 1.1; letter-spacing: -.03em; font-weight: 700; color: var(--navy); }
-h2 { font-size: 1.06rem; letter-spacing: -.015em; font-weight: 650; }
+h1 { font-size: 1.4rem; line-height: 1.1; letter-spacing: -.03em; font-weight: 700; color: var(--navy); }
+h2 { font-size: .94rem; letter-spacing: -.015em; font-weight: 650; }
 h3 { font-size: 1rem; font-weight: 600; }
-.lead { color: var(--navy); font-size: 1.01rem; margin-top: 4px; opacity: .85; }
+.lead { color: var(--navy); font-size: .9rem; margin-top: 4px; opacity: .85; }
 .label { font-size: 11.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text-2); }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px; }
 .stack > * + * { margin-top: 14px; }
@@ -107,7 +107,7 @@ h3 { font-size: 1rem; font-weight: 600; }
 .pdv-item:active { border-color: var(--blue); }
 
 /* ── Mosaicos de tipo de relevamiento ── */
-.sede { flex: 1; text-align: center; font-size: 1.28rem; font-weight: 700; letter-spacing: -.02em; padding-right: 54px; }
+.sede { flex: 1; text-align: center; font-size: 1.02rem; font-weight: 700; letter-spacing: -.02em; padding-right: 54px; }
 .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 22px; }
 .tile {
   position: relative; border: 0; border-radius: 20px; min-height: 210px; padding: 18px 10px 16px;
@@ -122,7 +122,7 @@ h3 { font-size: 1rem; font-weight: 600; }
 /* ── Ventana de planograma ── */
 .modal { position: fixed; inset: 0; z-index: 40; background: rgba(25,23,23,.55); backdrop-filter: blur(6px); display: grid; place-items: center; padding: 18px; }
 .modal-card { position: relative; background: #fff; width: 100%; max-width: 420px; border-radius: 26px; padding: 26px 22px 22px; text-align: center; box-shadow: var(--shadow); }
-.modal-card h2 { font-size: 1.36rem; line-height: 1.15; font-weight: 700; padding: 0 22px; }
+.modal-card h2 { font-size: 1.1rem; line-height: 1.15; font-weight: 700; padding: 0 22px; }
 .modal-card .sub { font-size: 1.01rem; margin: 4px 0 14px; }
 .modal-card .x { position: absolute; top: 12px; right: 14px; width: 38px; height: 38px; border: 0; background: none; font-size: 24.5px; line-height: 1; color: var(--navy); }
 .ref { position: relative; border-radius: 18px; overflow: hidden; background: #eaf2fb; aspect-ratio: 1; }
