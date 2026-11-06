@@ -3,7 +3,7 @@
 window.CONFIG = {
   CLIENTE: 'Profarco',
   // URL de la aplicacion web de Apps Script (ver README.md).
-  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbyt7BQ2-MSAwCXo9bUyE5svclP8VdpO2JoOwLERf-HgzwhKgKAktUZjgCy1RkA3OEGlvg/exec',
+  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycby6p0jT2C7fBJHqsBQD96-y-q5zZ_X03B3ilrZ71z9MGYP2iPr7UYrAIluqX1UsNy1czQ/exec',
   // Mismo valor que la propiedad TOKEN del Apps Script.
   TOKEN: 'profarco-k7Xq29mTw4vB8nZ3',
   // Solo modo prueba: PIN de administracion. Con Drive lo valida el script (ADMIN_PIN).
@@ -77,15 +77,11 @@ window.CONFIG = {
       { id: 'abast_parcial', texto: 'Parcial (50 a 80%)', tono: 'warn' },
       { id: 'abast_bajo', texto: 'Bajo (menos del 50%)', tono: 'bad' },
       { id: 'abast_sin', texto: 'Sin producto', tono: 'bad' } ] },
-    { id: 'precio', corto: 'Precio visible', numero: 3, titulo: 'Precio visible', nota: 'Una opción. Aplica siempre.', opciones: [
-      { id: 'precio_ok', texto: 'Sí, correcto', tono: 'ok' },
-      { id: 'precio_mal', texto: 'Sí, pero incorrecto', tono: 'warn' },
-      { id: 'precio_no', texto: 'No tiene precio', tono: 'bad' } ] },
-    { id: 'visib', corto: 'Visibilidad', numero: 4, titulo: 'Visibilidad del espacio', nota: 'Una opción. Aplica siempre.', opciones: [
+    { id: 'visib', corto: 'Visibilidad', numero: 3, titulo: 'Visibilidad del espacio', nota: 'Una opción. Aplica siempre.', opciones: [
       { id: 'visib_total', texto: 'Totalmente visible', tono: 'ok' },
       { id: 'visib_parcial', texto: 'Parcialmente obstruido', tono: 'warn' },
       { id: 'visib_obstruido', texto: 'Obstruido (carros, pallets, cajas)', tono: 'bad' } ] },
-    { id: 'estado', corto: 'Estado del mueble', numero: 5, titulo: 'Estado del mueble o material', nota: 'Una opción. Aplica siempre.', opciones: [
+    { id: 'estado', corto: 'Estado del mueble', numero: 4, titulo: 'Estado del mueble o material', nota: 'Una opción. Aplica siempre.', opciones: [
       { id: 'estado_bueno', texto: 'Bueno', tono: 'ok' },
       { id: 'estado_sucio', texto: 'Sucio', tono: 'warn' },
       { id: 'estado_roto', texto: 'Deteriorado o roto', tono: 'bad' },
@@ -96,18 +92,15 @@ window.CONFIG = {
 // Lista plana de respuestas posibles (la usan el tablero y los filtros). Los tres resultados se calculan solos: no se preguntan.
 window.CONFIG.CRITERIOS = [
   { id: 'cumple', texto: 'Cumple', grupo: 'resultado', tono: 'ok', derivado: true },
-  { id: 'parcial', texto: 'Cumple parcialmente', grupo: 'resultado', tono: 'warn', derivado: true },
   { id: 'no_cumple', texto: 'No cumple', grupo: 'resultado', tono: 'bad', derivado: true },
   ...window.CONFIG.PREGUNTAS.flatMap((q) => q.opciones.map((o) => ({ id: o.id, texto: o.texto, etiqueta: q.corto + ': ' + o.texto, grupo: q.id, tono: o.tono }))),
 ];
 
 // Regla de cumplimiento a partir de las respuestas (ids elegidos). Cambiala aqui si el criterio cambia.
-//   No cumple: la marca no esta, el espacio esta sin producto o esta obstruido.
-//   Cumple:    marca presente, abastecimiento completo, precio correcto, totalmente visible y mueble en buen estado.
-//   Parcial:   todo lo demas.
+//   Cumple:    marca presente, abastecimiento completo, totalmente visible y mueble en buen estado.
+//   No cumple: todo lo demas (solo hay dos resultados).
 window.CONFIG.resultado = (ids) => {
   const t = (id) => ids.includes(id);
-  if (t('presente_no') || t('abast_sin') || t('visib_obstruido')) return 'no_cumple';
-  if (t('presente_si') && t('abast_completo') && t('precio_ok') && t('visib_total') && t('estado_bueno')) return 'cumple';
-  return 'parcial';
+  if (t('presente_si') && t('abast_completo') && t('visib_total') && t('estado_bueno')) return 'cumple';
+  return 'no_cumple';
 };

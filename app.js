@@ -127,6 +127,41 @@
     document.getElementById('otro').onclick = () => { localStorage.removeItem('usuario'); state.usuario = null; ir('ci'); };
   }
 
+  // Al finalizar: si de una marca quedaron espacios sin relevar, se pide el motivo (queda guardado y se ve en el tablero).
+  function finalizarVisita() {
+    const faltan = C.MARCAS.map((m) => ({ marca: m, total: tiposDeMarca(m).length, tipos: tiposDeMarca(m).filter((t) => !state.hechos.has(m + '|' + t.id)) }))
+      .filter((x) => x.tipos.length && x.tipos.length < x.total);
+    const cerrar = () => { state.hechos = new Set(); state.marca = ''; ir('pdv'); };
+    if (!faltan.length) return cerrar();
+    let motivo = '', texto = '';
+    const m = document.createElement('div'); m.className = 'modal';
+    const valido = () => motivo === 'no' || (motivo === 'otro' && texto.trim().length >= 3);
+    const pintar = () => {
+      m.innerHTML = `<div class="modal-card"><button class="x" data-x aria-label="Cerrar">×</button>
+        <h2>¿Por qué no se relevaron todos los espacios?</h2>
+        <div class="sub">${faltan.map((x) => `<b>${esc(x.marca)}</b>: faltan ${x.tipos.map((t) => esc(t.nombre)).join(', ')}`).join('<br>')}</div>
+        <div class="opts" style="margin-top:12px">
+          <button class="opt radio ${motivo === 'no' ? 'on' : ''}" data-mo="no"><span class="box"></span>No se encontraron los demás espacios</button>
+          <button class="opt radio ${motivo === 'otro' ? 'on' : ''}" data-mo="otro"><span class="box"></span>Otro</button></div>
+        ${motivo === 'otro' ? `<textarea class="in" id="mtxt" rows="3" placeholder="Escribe el motivo" style="margin-top:10px;width:100%">${esc(texto)}</textarea>` : ''}
+        <button class="btn teal block" data-ok style="margin-top:14px" ${valido() ? '' : 'disabled'}>Finalizar visita</button></div>`;
+      m.querySelector('[data-x]').onclick = () => m.remove();
+      m.querySelectorAll('[data-mo]').forEach((b) => b.onclick = () => { motivo = b.dataset.mo; pintar(); m.querySelector('#mtxt')?.focus(); });
+      const t = m.querySelector('#mtxt');
+      if (t) t.oninput = () => { texto = t.value; m.querySelector('[data-ok]').disabled = !valido(); };
+      m.querySelector('[data-ok]').onclick = async (e) => {
+        e.target.disabled = true; e.target.textContent = 'Guardando…';
+        const por = motivo === 'no' ? 'No se encontraron los demás espacios' : 'Otro: ' + texto.trim();
+        try {
+          for (const x of faltan) await S.guardarNota({ pdv: state.pdv, marca: x.marca, tipo: 'Sin relevar: ' + x.tipos.map((q) => q.nombre).join(', '), ci: state.usuario.ci, relevador: state.usuario.nombre, texto: por });
+          m.remove(); pintarSync(); cerrar();
+        } catch (err) { toast('No se pudo guardar: ' + err.message); e.target.disabled = false; e.target.textContent = 'Finalizar visita'; }
+      };
+    };
+    pintar();
+    document.body.appendChild(m);
+  }
+
   function pasoMarca() {
     const hecha = (m) => [...state.hechos].some((h) => h.startsWith(m + '|'));
     $app.innerHTML = `<div class="wrap"><h1>Marca</h1><p class="lead">¿Qué marca vas a relevar?</p>
@@ -134,7 +169,7 @@
       <div class="marcas">${C.MARCAS.map((m) => `<button class="marca-b ${hecha(m) ? 'hecha' : ''}" data-m="${esc(m)}">${esc(m)}${hecha(m) ? '<i>✓</i>' : ''}</button>`).join('')}</div>
       ${state.hechos.size ? '<button class="btn primary block" id="fin" style="margin-top:22px">Finalizar visita</button>' : ''}</div>`;
     document.getElementById('atras').onclick = () => ir('pdv');
-    document.getElementById('fin')?.addEventListener('click', () => { state.hechos = new Set(); ir('pdv'); });
+    document.getElementById('fin')?.addEventListener('click', finalizarVisita);
     $app.querySelectorAll('[data-m]').forEach((b) => b.onclick = () => { state.marca = b.dataset.m; ir('tipos'); });
   }
 
@@ -146,7 +181,7 @@
       <div class="tiles">${tiposDeMarca(state.marca).map((t) => `<button class="tile ${t.img ? '' : 'sin-img'}" data-t="${t.id}" style="background:${t.color}">${state.hechos.has(state.marca + '|' + t.id) ? '<span class="hecho">✓ Relevado</span>' : ''}${t.img ? `<img src="${t.img}" alt="">` : `<span class="tile-ico">${ico}</span>`}<b>${esc(t.nombre)}</b></button>`).join('')}</div>
       ${state.hechos.size ? '<button class="btn primary block" id="fin" style="margin-top:22px">Finalizar visita</button>' : ''}</div>`;
     document.getElementById('atras').onclick = () => ir('marca');
-    document.getElementById('fin')?.addEventListener('click', () => { state.hechos = new Set(); ir('pdv'); });
+    document.getElementById('fin')?.addEventListener('click', finalizarVisita);
     $app.querySelectorAll('[data-t]').forEach((b) => b.onclick = () => { state.tipo = tipoDe(b.dataset.t); abrirReferencia(); });
   }
 
@@ -251,10 +286,10 @@
       e.target.disabled = true; e.target.textContent = 'Guardando…';
       try {
         const n = state.fotos.length, ids = [...sel];
-        await S.guardarFotos({ pdv: state.pdv, marca: state.marca, tipo: state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, criterios: [...ids, C.resultado(ids)] }, state.fotos.map((f) => f.blob));
+        const sync = await S.guardarFotos({ pdv: state.pdv, marca: state.marca, tipo: state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, criterios: [...ids, C.resultado(ids)] }, state.fotos.map((f) => f.blob));
         state.fotos.forEach((f) => URL.revokeObjectURL(f.url));
         state.fotos = []; state.hechos.add(state.marca + '|' + state.tipo.id);
-        toast(S.remoto ? `${n} foto(s) guardadas` : `${n} foto(s) guardadas en este dispositivo (modo prueba)`);
+        toast(!S.remoto ? `${n} foto(s) guardadas en este dispositivo (modo prueba)` : sync && sync.pendientes ? `Guardado en el teléfono: ${sync.pendientes} foto(s) se subirán cuando haya señal` : `${n} foto(s) guardadas`);
         pintarSync(); ir('tipos');
       } catch (err) { toast('No se pudo guardar: ' + err.message); e.target.disabled = false; e.target.textContent = 'Guardar relevamiento'; }
     };
@@ -348,7 +383,8 @@
     const V = agrupar(lista);
 
     const INCID = C.CRITERIOS.filter((x) => !x.derivado && (x.tono === 'bad' || x.tono === 'warn')).map((x) => x.id);   // respuestas que cuentan como hallazgo
-    const resDe = (x) => ['cumple', 'parcial', 'no_cumple'].find((id) => (x.criterios || []).includes(id)) || null;
+    // Solo hay dos resultados: Cumple / No cumple (un 'parcial' de registros viejos cuenta como No cumple).
+    const resDe = (x) => { const r = ['cumple', 'no_cumple', 'parcial'].find((id) => (x.criterios || []).includes(id)); return r === 'parcial' ? 'no_cumple' : r || null; };
     const cnt = (arr, id) => arr.filter((x) => resDe(x) === id).length;
     const tiene = (arr, id) => arr.filter((x) => (x.criterios || []).includes(id)).length;
     const pct = (a, b) => (b ? Math.round((a / b) * 100) : null);
@@ -448,6 +484,11 @@
               <label class="f-sel"><span>Respuesta</span><select data-f="criterio"><option value="">Todas</option>${C.CRITERIOS.filter((cr) => !cr.derivado).map((cr) => `<option value="${cr.id}" ${f.criterio === cr.id ? 'selected' : ''}>${esc(cr.etiqueta || cr.texto)}</option>`).join('')}</select></label>
               <label class="f-sel"><span>Desde</span><input type="date" data-f="desde" value="${f.desde}"></label><label class="f-sel"><span>Hasta</span><input type="date" data-f="hasta" value="${f.hasta}"></label></div>`;
 
+    // ── Visitas incompletas: motivo por el que no se relevaron todos los espacios ──
+    const notas = (S.notas || []).filter((x) => (!f.desde || diaISO(x.ts) >= f.desde) && (!f.hasta || diaISO(x.ts) <= f.hasta) && (!f.pdv || x.pdv === f.pdv) && (!f.marca || x.marca === f.marca)).sort((a, b) => b.ts - a.ts);
+    const secNotas = `<section class="panel"><div class="p-head"><i class="k-ico warn">${svg('warn', 18)}</i><div><h2>Espacios sin relevar</h2><p>Motivo que indicó el relevador al finalizar la visita.</p></div></div>
+            ${notas.length ? notas.map((x) => `<div class="vis"><div class="vis-h"><div><b>${esc(x.pdv)} · ${esc(x.marca || '')}</b><small>${fmtFecha(x.ts)} · Relevó ${esc(x.relevador)}</small></div><span class="chip org">${esc(String(x.tipo || '').replace(/^Sin relevar: /, ''))}</span></div><div class="an-box" style="min-height:0">${esc(x.texto)}</div></div>`).join('') : '<div class="empty">Sin justificaciones registradas</div>'}</section>`;
+
     // ── Resumen: indicadores y estado por punto de venta (con filtro) ──
     const secResumen = `<section><h1>Resumen</h1><p class="sub">Cumplimiento de rutas y relevamientos del período.</p>
             <div class="k-grid k3">
@@ -457,17 +498,17 @@
             </div><div class="k-nota">Rutas: ${relevados} de ${pdvsVista.length} puntos de venta relevados. Promedio: respuestas favorables sobre el total de respuestas.</div></section>
           <section class="panel" id="s-pdv"><div class="p-head"><i class="k-ico ok">${svg('pin', 18)}</i><div><h2>Estado por punto de venta</h2><p>Toca un punto de venta para ver su detalle, fotos y evidencias.</p></div>
               <div class="p-ctl">${select('pdv', 'Punto de venta', pdvsAll)}<div class="seg sm"><button class="seg-b ${orden === 'mayor' ? 'on' : ''}" data-o="mayor">Mayor ↓</button><button class="seg-b ${orden === 'menor' ? 'on' : ''}" data-o="menor">Menor ↑</button><button class="seg-b ${orden === 'az' ? 'on' : ''}" data-o="az">A–Z</button></div></div></div>
-            <div class="leyenda"><span><i class="ok"></i>Cumple</span><span><i class="warn"></i>Parcial</span><span><i class="bad"></i>No cumple</span><span><i class="mut"></i>Sin resultado</span></div>
+            <div class="leyenda"><span><i class="ok"></i>Cumple</span><span><i class="bad"></i>No cumple</span><span><i class="mut"></i>Sin resultado</span></div>
             ${filasPdv.length ? filasPdv.map((r) => `<div class="pdv-row ir" data-det="${esc(r.nombre)}"><div class="pdv-n"><b>${esc(r.nombre)}</b><small>${r.n ? `${r.n} góndola${r.n > 1 ? 's' : ''} auditada${r.n > 1 ? 's' : ''}` : 'Sin relevar'}</small></div>
               <div class="pdv-bar">${r.n ? seg('ok', r.cc, r.n) + seg('warn', r.pp, r.n) + seg('bad', r.nn, r.n) + seg('mut', r.ss, r.n) : ''}</div>
-              <div class="pdv-p ${tonoPct(r.pc)}">${r.pc === null ? '–' : r.pc + '%'}<small>${r.cc} de ${r.cc + r.pp + r.nn}</small></div></div>`).join('') : '<div class="empty">Sin puntos de venta</div>'}</section>`;
+              <div class="pdv-p ${tonoPct(r.pc)}">${r.pc === null ? '–' : r.pc + '%'}<small>${r.cc} de ${r.cc + r.pp + r.nn}</small></div></div>`).join('') : '<div class="empty">Sin puntos de venta</div>'}</section>${secNotas}`;
 
     // ── Evaluación: análisis de góndolas + comparativa planograma vs foto ──
     const secEval = `<section><h1>Evaluación</h1><p class="sub">Análisis de góndolas y comparativa del planograma ideal con lo auditado.</p>${filtros}</section>
           <section class="panel" id="s-ana"><div class="p-head"><i class="k-ico warn">${svg('flag', 18)}</i><div><h2>Análisis de góndolas</h2><p>${n} góndola${n === 1 ? '' : 's'} auditada${n === 1 ? '' : 's'} con los filtros elegidos</p></div></div>
             <div class="trio">
               <div><h3 class="sub-h">Resultado general</h3><div class="donut-w"><div class="donut" style="background:${donut}"><div><b>${pctCumple === null ? '–' : pctCumple + '%'}</b><small>cumple</small></div></div>
-                <ul class="d-leg"><li><i class="ok"></i>Cumple<b>${c}</b></li><li><i class="warn"></i>Parcial<b>${p}</b></li><li><i class="bad"></i>No cumple<b>${nc}</b></li><li><i class="mut"></i>Sin resultado<b>${sin}</b></li></ul></div></div>
+                <ul class="d-leg"><li><i class="ok"></i>Cumple<b>${c}</b></li><li><i class="bad"></i>No cumple<b>${nc}</b></li><li><i class="mut"></i>Sin resultado<b>${sin}</b></li></ul></div></div>
               <div><h3 class="sub-h">Hallazgos más frecuentes</h3>${hallazgos ? frec.map(([id, v]) => `<div class="fr-row"><span>${esc(criterioDe(id).etiqueta || criterioDe(id).texto)}</span><div class="fr-t"><i style="width:${(v / maxF) * 100}%"></i></div><b>${v}</b></div>`).join('') : '<div class="empty">Sin hallazgos registrados</div>'}</div>
               <div><h3 class="sub-h">Cumplimiento por marca</h3>${marcasR.length ? marcasR.map((z) => `<div class="zn-row"><span>${esc(z.m)}</span><b>${z.n}</b><em class="${tonoPct(z.pc)}">${z.pc === null ? '–' : z.pc + '%'}</em></div>`).join('') : '<div class="empty">Sin datos por marca</div>'}</div>
             </div></section>

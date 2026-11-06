@@ -117,13 +117,14 @@ function doPost(e) {
       return json_({ ok: true, nombre: String(r[1]).trim(), pdvs: pdvs });
     }
     if (b.action === 'foto') return json_({ ok: true, id: guardarFoto_(b) });
+    if (b.action === 'nota') { guardarNota_(b); return json_({ ok: true }); }
 
     if (bloqueado_()) return json_({ ok: false, error: 'Demasiados intentos. Espera unos minutos.' });
 
     // Tablero del cliente: acepta la clave del tablero o la de administracion.
     if (b.action === 'pdvs') return chequeo_(tableroOk_(b.pin)) ? json_({ ok: true, pdvs: filas_('Puntos de venta').filter(function (x) { return activo_(x[3]); }).map(pdvObj_) }) : json_({ ok: false, error: 'Clave incorrecta' });
     if (b.action === 'pin' && b.ambito !== 'admin') return chequeo_(tableroOk_(b.pin)) ? json_({ ok: true }) : json_({ ok: false, error: 'Clave incorrecta' });
-    if (b.action === 'fotos') return chequeo_(tableroOk_(b.pin)) ? json_({ ok: true, fotos: listarFotos_() }) : json_({ ok: false, error: 'Clave incorrecta' });
+    if (b.action === 'fotos') return chequeo_(tableroOk_(b.pin)) ? json_({ ok: true, fotos: listarFotos_().fotos, notas: listarFotos_().notas }) : json_({ ok: false, error: 'Clave incorrecta' });
 
     // Lo siguiente (planogramas) es solo de administracion.
     if (!chequeo_(pinOk_(b.pin))) return json_({ ok: false, error: 'PIN incorrecto' });
@@ -168,12 +169,26 @@ function guardarFoto_(b) {
   return f.getId();
 }
 
+// Justificacion de espacios no relevados: una fila en "Registro de fotos" sin ID de foto y con 'justif' en Criterios.
+function guardarNota_(b) {
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    const hoja = SpreadsheetApp.openById(planillaId_('Registro de fotos')).getSheets()[0];
+    if (hoja.getLastRow() < 1 || hoja.getLastColumn() < ENCABEZADO_REGISTRO.length) hoja.getRange(1, 1, 1, ENCABEZADO_REGISTRO.length).setValues([ENCABEZADO_REGISTRO]);
+    hoja.appendRow([Utilities.formatDate(new Date(b.ts), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm'), b.ts, "'" + digitos_(b.ci), b.relevador, b.pdv, b.marca || '', b.tipo, 'Espacios sin relevar', String(b.texto || ''), '', 'justif']);
+  } finally { lock.releaseLock(); }
+  cacheDel_(['fotos']);
+}
+
 function listarFotos_() {
   const c = cacheGet_('fotos');
   if (c) return c;
-  let id; try { id = planillaId_('Registro de fotos'); } catch (e) { return []; }
+  let id; try { id = planillaId_('Registro de fotos'); } catch (e) { return { fotos: [], notas: [] }; }
   const v = SpreadsheetApp.openById(id).getSheets()[0].getDataRange().getValues().slice(1);
-  const out = v.filter(function (r) { return r[9]; }).map(function (r) {
+  const notas = v.filter(function (r) { return !r[9] && r[10] === 'justif'; }).map(function (r) {
+    return { ts: Number(r[1]), relevador: r[3], pdv: r[4], marca: r[5], tipo: r[6], texto: String(r[8] || '') };
+  });
+  const fotos = v.filter(function (r) { return r[9]; }).map(function (r) {
     return {
       id: r[9], ts: Number(r[1]), relevador: r[3], pdv: r[4], marca: r[5], tipo: r[6],
       criterios: String(r[10] || '').split('|').filter(String),
@@ -181,6 +196,7 @@ function listarFotos_() {
       thumb: 'https://drive.google.com/thumbnail?id=' + r[9] + '&sz=w400',
     };
   });
+  const out = { fotos: fotos, notas: notas };
   cachePut_('fotos', out, CACHE_FOTOS);
   return out;
 }

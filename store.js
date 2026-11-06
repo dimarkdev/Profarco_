@@ -27,6 +27,7 @@
         const rq = fn(t.objectStore(s));
         t.oncomplete = () => res(rq && rq.result);
         t.onerror = () => rej(t.error);
+        t.onabort = () => rej(t.error || new Error('No se pudo guardar en el dispositivo (¿poco espacio?)'));
       });
     };
     return {
@@ -71,6 +72,7 @@
     return new Promise((res) => cv.toBlob(res, 'image/jpeg', C.FOTO_CALIDAD));
   }
 
+  let subiendo = null;
   const urls = new Map();
   const urlDe = (id, blob) => { if (!urls.has(id)) urls.set(id, URL.createObjectURL(blob)); return urls.get(id); };
 
@@ -144,33 +146,46 @@
       }
       return Store.sincronizar();
     },
+    // Justificacion de espacios no relevados (sin foto). meta: {pdv, marca, tipo, ci, relevador, texto}
+    async guardarNota(meta) {
+      await DB.put('fotos', { id: uid(), kind: 'nota', ...meta, ts: Date.now(), subida: false });
+      return Store.sincronizar();
+    },
     async fotosLocales() {
-      return (await DB.all('fotos')).map((f) => ({ ...f, url: urlDe(f.id, f.blob), thumb: urlDe(f.id, f.blob) }));
+      return (await DB.all('fotos')).filter((f) => f.kind !== 'nota').map((f) => ({ ...f, url: urlDe(f.id, f.blob), thumb: urlDe(f.id, f.blob) }));
     },
     async pendientes() { return REMOTO ? (await DB.all('fotos')).filter((f) => !f.subida).length : 0; },
 
     // Sube la cola a Drive; las subidas ok se borran del dispositivo.
-    async sincronizar() {
-      if (!REMOTO || !navigator.onLine) return { subidas: 0 };
-      let subidas = 0;
-      for (const f of (await DB.all('fotos')).filter((x) => !x.subida)) {
-        try {
-          await post({
-            action: 'foto', pdv: f.pdv, marca: f.marca, tipo: f.tipo, ci: f.ci, relevador: f.relevador,
-            criterios: f.criterios, ts: f.ts, nombre: `${f.ts}_${f.id}.jpg`, data: await blobToB64(f.blob),
-          });
-          await DB.del('fotos', f.id);
-          subidas++;
-        } catch (e) { console.warn('No se pudo subir', f.id, e); break; }
-      }
-      return { subidas };
+    // Una sola subida a la vez: si dos disparos (guardar, volver la red, abrir la app) corren juntos, se duplicarian filas.
+    sincronizar() {
+      if (!REMOTO || !navigator.onLine) return Promise.resolve({ subidas: 0, pendientes: 0 });
+      if (subiendo) return subiendo;
+      subiendo = (async () => {
+        let subidas = 0;
+        const envia = (payload) => post(payload).catch(() => post(payload));   // un reintento por si el script tarda o la señal parpadea
+        for (const f of (await DB.all('fotos')).filter((x) => !x.subida)) {
+          try {
+            await envia(f.kind === 'nota'
+              ? { action: 'nota', pdv: f.pdv, marca: f.marca, tipo: f.tipo, ci: f.ci, relevador: f.relevador, texto: f.texto, ts: f.ts }
+              : { action: 'foto', pdv: f.pdv, marca: f.marca, tipo: f.tipo, ci: f.ci, relevador: f.relevador,
+                  criterios: f.criterios, ts: f.ts, nombre: `${f.ts}_${f.id}.jpg`, data: await blobToB64(f.blob) });
+            await DB.del('fotos', f.id);
+            subidas++;
+          } catch (e) { console.warn('No se pudo subir', f.id, e); break; }
+        }
+        return { subidas, pendientes: (await DB.all('fotos')).filter((x) => !x.subida).length };
+      })().finally(() => { subiendo = null; });
+      return subiendo;
     },
 
     // Todas las fotos para el tablero: las de Drive (requiere la clave) + las que siguen en cola.
     async todasLasFotos(pin) {
       const locales = await Store.fotosLocales();
-      if (!REMOTO) return locales;
+      Store.notas = [];
+      if (!REMOTO) { Store.notas = (await DB.all('fotos')).filter((f) => f.kind === 'nota'); return locales; }
       const j = await post({ action: 'fotos', pin });
+      Store.notas = [...(j.notas || []), ...(await DB.all('fotos')).filter((f) => f.kind === 'nota').map((f) => ({ ts: f.ts, relevador: f.relevador, pdv: f.pdv, marca: f.marca, tipo: f.tipo, texto: f.texto }))];
       return [...j.fotos, ...locales.map((f) => ({ ...f, pendiente: true }))];
     },
   };
