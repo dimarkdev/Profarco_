@@ -62,30 +62,28 @@ window.CONFIG = {
   // "si": la pregunta solo aparece cuando se eligio esa opcion. Los id se guardan en el registro: no los cambies una vez que haya datos.
   // "tono" (ok / warn / bad) lo usa el tablero para colorear la respuesta y contar hallazgos.
   PREGUNTAS: [
-    { id: 'presente', corto: 'Marca contratada', titulo: '¿Está la marca contratada en el espacio?', nota: 'Una opción.', opciones: [
-      { id: 'presente_si', texto: 'Sí, está', tono: 'ok' },
-      { id: 'presente_no', texto: 'No está', tono: 'bad' } ] },
+    { id: 'presente', corto: 'Marca en el espacio', titulo: '¿Se encuentra la marca en el espacio designado?', opciones: [
+      { id: 'presente_si', texto: 'Sí, se encuentra.', tono: 'ok' },
+      { id: 'presente_no', texto: 'No, no se encontró.', tono: 'bad' } ] },
     { id: 'ocupa', corto: 'Ocupa el espacio', numero: 1, si: 'presente_no', titulo: 'Si la marca contratada no está, ¿qué ocupa el espacio?',
-      nota: 'Una opción. Aplica solo cuando la marca contratada no está en el espacio.', opciones: [
+      nota: 'Aplica solo cuando la marca contratada no está en el espacio.', opciones: [
       { id: 'ocupa_profarco', texto: 'Otra marca de Profarco', tono: 'warn' },
       { id: 'ocupa_otra', texto: 'Otra marca (no Profarco)', tono: 'bad' },
       { id: 'ocupa_propia', texto: 'Marca propia o producto del supermercado', tono: 'bad' },
       { id: 'ocupa_material', texto: 'Material sin producto', tono: 'warn' },
       { id: 'ocupa_vacio', texto: 'Vacío', tono: 'bad' } ] },
-    { id: 'abast', corto: 'Abastecimiento', numero: 2, titulo: 'Nivel de abastecimiento del espacio', nota: 'Una opción. Aplica siempre.', opciones: [
-      { id: 'abast_completo', texto: 'Completo (más del 80%)', tono: 'ok' },
-      { id: 'abast_parcial', texto: 'Parcial (50 a 80%)', tono: 'warn' },
-      { id: 'abast_bajo', texto: 'Bajo (menos del 50%)', tono: 'bad' },
-      { id: 'abast_sin', texto: 'Sin producto', tono: 'bad' } ] },
-    { id: 'visib', corto: 'Visibilidad', numero: 3, titulo: 'Visibilidad del espacio', nota: 'Una opción. Aplica siempre.', opciones: [
+    { id: 'abast', corto: 'Abastecimiento', numero: 2, titulo: 'Nivel de abastecimiento del espacio', opciones: [
+      { id: 'abast_completo', texto: 'Completo (mayoría de productos).', tono: 'ok' },
+      { id: 'abast_bajo', texto: 'Bajo (poca cantidad de productos).', tono: 'bad' },
+      { id: 'abast_sin', texto: 'Sin producto.', tono: 'bad' } ] },
+    { id: 'visib', corto: 'Visibilidad', numero: 3, titulo: 'Visibilidad del espacio', opciones: [
       { id: 'visib_total', texto: 'Totalmente visible', tono: 'ok' },
       { id: 'visib_parcial', texto: 'Parcialmente obstruido', tono: 'warn' },
-      { id: 'visib_obstruido', texto: 'Obstruido (carros, pallets, cajas)', tono: 'bad' } ] },
-    { id: 'estado', corto: 'Estado del mueble', numero: 4, titulo: 'Estado del mueble o material', nota: 'Una opción. Aplica siempre.', opciones: [
+      { id: 'visib_obstruido', texto: 'Obstruido (por otros muebles, cajas, productos que no corresponden, etc.)', tono: 'bad' } ] },
+    { id: 'estado', corto: 'Estado del mueble', numero: 4, titulo: 'Estado del mueble', opciones: [
       { id: 'estado_bueno', texto: 'Bueno', tono: 'ok' },
       { id: 'estado_sucio', texto: 'Sucio', tono: 'warn' },
-      { id: 'estado_roto', texto: 'Deteriorado o roto', tono: 'bad' },
-      { id: 'estado_sin', texto: 'Sin material', tono: 'warn' } ] },
+      { id: 'estado_roto', texto: 'Deteriorado o roto', tono: 'bad' } ] },
   ],
 };
 

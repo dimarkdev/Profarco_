@@ -271,7 +271,7 @@
     const completo = visibles.every((q) => q.opciones.some((o) => sel.has(o.id)));
     $app.innerHTML = `<div class="wrap"><h1>Relevamiento</h1><p class="lead">${esc(state.pdv)} · ${esc(state.marca)} · ${esc(state.tipo.nombre)}</p>
       <div class="thumbs">${state.fotos.map((f, i) => `<div class="foto"><img src="${esc(f.url)}" alt=""><button class="x" data-del="${i}" aria-label="Quitar">×</button></div>`).join('')}</div>
-      ${visibles.map((q) => `<div class="preg"><h2>${q.numero ? q.numero + '. ' : ''}${esc(q.titulo)}</h2><p class="muted">${esc(q.nota)}</p>
+      ${visibles.map((q) => `<div class="preg"><h2>${q.numero ? q.numero + '. ' : ''}${esc(q.titulo)}</h2>${q.nota ? `<p class="muted">${esc(q.nota)}</p>` : ''}
         <div class="opts">${q.opciones.map((o) => `<button class="opt radio ${sel.has(o.id) ? 'on' : ''}" data-c="${o.id}"><span class="box"></span>${esc(o.texto)}</button>`).join('')}</div></div>`).join('')}
       <div class="sticky-bar"><div class="row"><button class="btn" id="mas" ${state.fotos.length >= C.MAX_FOTOS ? 'disabled' : ''}>+ Foto</button><button class="btn teal block" id="guardar" ${completo && state.fotos.length ? '' : 'disabled'}>Guardar relevamiento</button></div></div></div>`;
     $app.querySelectorAll('[data-c]').forEach((b) => b.onclick = () => {
