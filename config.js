@@ -22,18 +22,18 @@ window.CONFIG = {
 
   // Tipos de espacio (despues de la marca). El id va en los datos: no lo cambies una vez que haya registros.
   TIPOS: [
-    { id: 'puntera', nombre: 'Puntera', img: 'img/punteras.png', color: '#0f6e91' },
-    { id: 'puntera_caja', nombre: 'Puntera de caja', color: '#2a9d8f' },
-    { id: 'pestana', nombre: 'Pestaña', img: 'img/pestanas.png', color: '#3b82e6' },
-    { id: 'pestana_caja', nombre: 'Pestaña de caja', color: '#2a9d8f' },
-    { id: 'exhibidor', nombre: 'Exhibidor', color: '#3cc47f' },
-    { id: 'isla', nombre: 'Isla', img: 'img/islas.png', color: '#3cc47f' },
-    { id: 'bandeja_lateral', nombre: 'Bandeja / lateral', color: '#0f6e91' },
-    { id: 'ganchera', nombre: 'Ganchera', color: '#3b82e6' },
-    { id: 'portico', nombre: 'Pórtico', color: '#2a9d8f' },
-    { id: 'enmarcado', nombre: 'Enmarcado', color: '#0f6e91' },
-    { id: 'tramo_gondola', nombre: 'Tramo de góndola', img: 'img/gondola.png', color: '#3b82e6' },
-    { id: 'pedestal', nombre: 'Pedestal', color: '#3cc47f' },
+    { id: 'puntera', nombre: 'Puntera', img: 'img/tipos/puntera.png', color: '#0f6e91' },
+    { id: 'puntera_caja', nombre: 'Puntera de caja', img: 'img/tipos/puntera_caja.png', color: '#2a9d8f' },
+    { id: 'pestana', nombre: 'Pestaña', img: 'img/tipos/pestana.png', color: '#3b82e6' },
+    { id: 'pestana_caja', nombre: 'Pestaña de caja', img: 'img/tipos/pestana_caja.png', color: '#2a9d8f' },
+    { id: 'exhibidor', nombre: 'Exhibidor', img: 'img/tipos/exhibidor.png', color: '#3cc47f' },
+    { id: 'isla', nombre: 'Isla', img: 'img/tipos/isla.png', color: '#3cc47f' },
+    { id: 'bandeja_lateral', nombre: 'Bandeja / lateral', img: 'img/tipos/bandeja_lateral.png', color: '#0f6e91' },
+    { id: 'ganchera', nombre: 'Ganchera', img: 'img/tipos/ganchera.png', color: '#3b82e6' },
+    { id: 'portico', nombre: 'Pórtico', img: 'img/tipos/portico.png', color: '#2a9d8f' },
+    { id: 'enmarcado', nombre: 'Enmarcado', img: 'img/tipos/enmarcado.png', color: '#0f6e91' },
+    { id: 'tramo_gondola', nombre: 'Tramo de góndola', img: 'img/tipos/tramo_gondola.png', color: '#3b82e6' },
+    { id: 'pedestal', nombre: 'Pedestal', img: 'img/tipos/pedestal.png', color: '#3cc47f' },
   ],
 
   // Tipos de espacio que tiene cada marca (por id): son los unicos que se ofrecen al relevar esa marca y al cargar sus planogramas.
