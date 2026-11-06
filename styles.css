@@ -466,10 +466,11 @@ body.dash .g-item.on { border-color: #3cb3a8; box-shadow: 0 0 0 3px rgba(60,179,
 .pin-bg i b::before { width: 55%; height: 14%; }
 .pin-bg i b::after { width: 14%; height: 55%; }
 
-/* Tipos de espacio: botones redondeados y compactos, 3 por fila */
-.tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
-.tile { min-height: 0 !important; padding: 8px 4px 10px; border-radius: 22px; background: #1a1d23 !important; justify-content: flex-start; gap: 2px; box-shadow: 0 4px 12px rgba(20,24,30,.18); overflow: hidden; }
-.tile img { width: 100%; height: auto !important; max-width: none; aspect-ratio: 1; object-fit: cover; border-radius: 16px; }
-.tile b { font-size: .78rem; font-weight: 600; line-height: 1.15; padding: 0 2px; min-height: 2.3em; display: flex; align-items: center; }
-.tile .hecho { top: 8px; right: 8px; width: 22px; height: 22px; padding: 0; display: grid; place-items: center; font-size: 0; border-radius: 50%; background: #22a447; color: #fff; }
-.tile .hecho::before { content: '¹3'; font-size: 13px; font-weight: 800; }
+/* Tipos de espacio: lista de botones blancos con el icono en un circulo celeste */
+.tiles { grid-template-columns: 1fr; gap: 9px; margin-top: 16px; }
+.tile { flex-direction: row !important; align-items: center; justify-content: flex-start !important; gap: 12px; min-height: 0 !important; padding: 8px 14px 8px 9px; border-radius: 18px; background: #fff !important; color: #1b2a3a; border: 1px solid #e6edf3; box-shadow: 0 3px 10px rgba(30,60,90,.08); text-align: left; overflow: visible; }
+.tile img { order: 1; flex: none; width: 54px; height: 54px !important; max-width: none; aspect-ratio: 1; object-fit: contain; padding: 9px; border-radius: 50%; background: #dcebf6; }
+.tile b { order: 2; flex: 1; min-height: 0; padding: 0; font-size: .98rem; font-weight: 600; line-height: 1.2; display: block; text-align: left; }
+.tile::after { order: 4; content: '›'; color: #9fb3c4; font-size: 1.5rem; line-height: 1; }
+.tile .hecho { order: 3; position: static; width: 22px; height: 22px; padding: 0; display: grid; place-items: center; font-size: 0; border-radius: 50%; background: #22a447; color: #fff; }
+.tile .hecho::before { content: '✓'; font-size: 13px; font-weight: 800; }
