@@ -575,7 +575,7 @@
       <div class="main">
         <header class="bar"><div class="crumb">Profarco <span>/</span> Principal <span>/</span> <b>${vista === 'eval' ? 'Evaluación' : vista === 'esp' ? 'Espacios' : vista === 'ev' ? 'Evidencias' : vista === 'det' ? 'Detalle de punto de venta' : 'Resumen'}</b></div>
           <div class="bar-r"><div class="seg">${per('hoy', 'Hoy')}${per('mes', 'Este mes')}${per('todo', 'Todo')}</div>
-            <button class="btn-o" id="csv">${svg('down', 17)}Exportar</button></div></header>
+</div></header>
         <div class="content">${vista === 'eval' ? secEval : vista === 'esp' ? secEsp : vista === 'ev' ? secEv : vista === 'det' ? secDet : secResumen}</div></div></div>`;
 
     $app.querySelectorAll('[data-f]').forEach((el) => el.onchange = () => { f[el.dataset.f] = el.value; if (el.dataset.f === 'desde' || el.dataset.f === 'hasta') state.periodo = ''; pintarTablero(); });
@@ -611,12 +611,6 @@
     if (document.getElementById('prev')) document.getElementById('prev').onclick = () => ir(-1);
     if (document.getElementById('next')) document.getElementById('next').onclick = () => ir(1);
     document.getElementById('salir').onclick = () => { localStorage.removeItem('pin-tablero'); sessionStorage.removeItem('pin-tablero'); location.reload(); };
-    document.getElementById('csv').onclick = () => {
-      const filas = [['Fecha', 'Punto de venta', 'Marca', 'Tipo de espacio', 'Relevador', 'Observaciones', 'Enlace'],
-        ...lista.map((x) => [new Date(x.ts).toISOString(), x.pdv, x.marca || '', x.tipo, x.relevador, (x.criterios || []).map((id) => criterioDe(id).texto).join('; '), x.pendiente ? '(por subir)' : x.url])];
-      const csv = '﻿' + filas.map((r) => r.map((cc) => `"${String(cc).replace(/"/g, '""')}"`).join(',')).join('\n');
-      Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })), download: `fotos-gondola-${diaISO(Date.now())}.csv` }).click();
-    };
   }
 
   // ═══════════ PLANOGRAMAS ═══════════

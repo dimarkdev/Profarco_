@@ -55,7 +55,6 @@ const TEXTOS = {
   ocupa_profarco: 'Ocupa: otra marca de Profarco', ocupa_otra: 'Ocupa: otra marca (no Profarco)', ocupa_propia: 'Ocupa: marca propia o del supermercado',
   ocupa_material: 'Ocupa: material sin producto', ocupa_vacio: 'Ocupa: vacio',
   abast_completo: 'Abastecimiento: completo (mas del 80%)', abast_parcial: 'Abastecimiento: parcial (50 a 80%)', abast_bajo: 'Abastecimiento: bajo (menos del 50%)', abast_sin: 'Abastecimiento: sin producto',
-  precio_ok: 'Precio: visible y correcto', precio_mal: 'Precio: visible pero incorrecto', precio_no: 'Precio: no tiene',
   visib_total: 'Visibilidad: totalmente visible', visib_parcial: 'Visibilidad: parcialmente obstruido', visib_obstruido: 'Visibilidad: obstruido',
   estado_bueno: 'Mueble: bueno', estado_sucio: 'Mueble: sucio', estado_roto: 'Mueble: deteriorado o roto', estado_sin: 'Mueble: sin material',
 };
