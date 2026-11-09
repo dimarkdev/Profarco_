@@ -428,6 +428,15 @@
       : orden === 'menor' ? (a.pc ?? 999) - (b.pc ?? 999) || a.nombre.localeCompare(b.nombre)
       : (b.pc ?? -1) - (a.pc ?? -1) || a.nombre.localeCompare(b.nombre));
     const tonoPct = (v) => (v === null ? 'mut' : v >= 80 ? 'ok' : v >= 50 ? 'warn' : 'bad');
+    // Estado por cadena: agrupa los puntos de venta por su cadena.
+    const cadDe = {}; state.pdvs.forEach((p) => { cadDe[p.nombre] = p.cadena || 'Sin cadena'; });
+    const cadenas = {};
+    filasPdv.forEach((r) => { const k = cadDe[r.nombre] || 'Sin cadena'; (cadenas[k] = cadenas[k] || []).push(r); });
+    const filasCad = Object.keys(cadenas).map((k) => {
+      const rs = cadenas[k], cc = rs.reduce((s, r) => s + r.cc, 0), tot = rs.reduce((s, r) => s + r.cc + r.pp + r.nn, 0);
+      return { nombre: k, pdvs: rs, total: rs.length, rel: rs.filter((r) => r.n).length, n: rs.reduce((s, r) => s + r.n, 0), cc, pc: pct(cc, tot) };
+    }).sort((a, b) => (b.pc ?? -1) - (a.pc ?? -1) || b.total - a.total || a.nombre.localeCompare(b.nombre));
+    const cadSel = filasCad.find((x) => x.nombre === state.cadena) || null;
     const seg = (cls, v, tot) => (v ? `<i class="${cls}" style="width:${(v / tot) * 100}%"></i>` : '');
 
     // ── Donut, hallazgos y zonas ──
@@ -491,17 +500,22 @@
 
     // ── Resumen: indicadores y estado por punto de venta (con filtro) ──
     const secResumen = `<section><h1>Resumen</h1><p class="sub">Cumplimiento de rutas y relevamientos del período.</p>
-            <div class="k-grid k3">
+            <div class="k-grid k4">
+              ${kpi('az', 'pin', 'Total de puntos de venta', pdvsVista.length)}
               ${kpi('ok', 'pin', 'Cumplimiento de rutas', pctRuta === null ? '–' : pctRuta + '%', `<div class="k-bar"><b class="ok" style="width:${pctRuta || 0}%"></b></div>`)}
               ${kpi('az', 'foto', 'Cantidad de relevamientos', n)}
               ${kpi('warn', 'cumple', 'Promedio de respuestas favorables', pctResp === null ? '–' : pctResp + '%', `<div class="k-bar"><b class="ok" style="width:${pctResp || 0}%"></b></div>`)}
             </div><div class="k-nota">Rutas: ${relevados} de ${pdvsVista.length} puntos de venta relevados. Promedio: respuestas favorables sobre el total de respuestas.</div></section>
-          <section class="panel" id="s-pdv"><div class="p-head"><i class="k-ico ok">${svg('pin', 18)}</i><div><h2>Estado por punto de venta</h2><p>Toca un punto de venta para ver su detalle, fotos y evidencias.</p></div>
-              <div class="p-ctl">${select('pdv', 'Punto de venta', pdvsAll)}<div class="seg sm"><button class="seg-b ${orden === 'mayor' ? 'on' : ''}" data-o="mayor">Mayor ↓</button><button class="seg-b ${orden === 'menor' ? 'on' : ''}" data-o="menor">Menor ↑</button><button class="seg-b ${orden === 'az' ? 'on' : ''}" data-o="az">A–Z</button></div></div></div>
+          <section class="panel" id="s-cad"><div class="p-head"><i class="k-ico az">${svg('grid', 18)}</i><div><h2>Estado por cadena</h2><p>Toca una cadena para ver sus puntos de venta.</p></div></div>
+            <div class="cad-g">${filasCad.length ? filasCad.map((x) => `<button class="cad ${cadSel && cadSel.nombre === x.nombre ? 'on' : ''}" data-cad="${esc(x.nombre)}"><div class="cad-t"><b>${esc(x.nombre)}</b><span class="${tonoPct(x.pc)}">${x.pc === null ? '–' : x.pc + '%'}</span></div>
+              <div class="k-bar"><b class="${tonoPct(x.pc) === 'mut' ? '' : tonoPct(x.pc)}" style="width:${x.pc || 0}%"></b></div>
+              <small>${x.rel} de ${x.total} puntos de venta relevados · ${x.n} góndola${x.n === 1 ? '' : 's'}</small></button>`).join('') : '<div class="empty">Sin cadenas</div>'}</div></section>
+          ${cadSel ? `<section class="panel" id="s-pdv"><div class="p-head"><i class="k-ico ok">${svg('pin', 18)}</i><div><h2>${esc(cadSel.nombre)} · puntos de venta</h2><p>Toca un punto de venta para ver su detalle, fotos y evidencias.</p></div>
+              <div class="p-ctl"><button class="btn-o" data-cad="">Cerrar</button><div class="seg sm"><button class="seg-b ${orden === 'mayor' ? 'on' : ''}" data-o="mayor">Mayor ↓</button><button class="seg-b ${orden === 'menor' ? 'on' : ''}" data-o="menor">Menor ↑</button><button class="seg-b ${orden === 'az' ? 'on' : ''}" data-o="az">A–Z</button></div></div></div>
             <div class="leyenda"><span><i class="ok"></i>Cumple</span><span><i class="bad"></i>No cumple</span><span><i class="mut"></i>Sin resultado</span></div>
-            ${filasPdv.length ? filasPdv.map((r) => `<div class="pdv-row ir" data-det="${esc(r.nombre)}"><div class="pdv-n"><b>${esc(r.nombre)}</b><small>${r.n ? `${r.n} góndola${r.n > 1 ? 's' : ''} auditada${r.n > 1 ? 's' : ''}` : 'Sin relevar'}</small></div>
+            ${cadSel.pdvs.map((r) => `<div class="pdv-row ir" data-det="${esc(r.nombre)}"><div class="pdv-n"><b>${esc(r.nombre)}</b><small>${r.n ? `${r.n} góndola${r.n > 1 ? 's' : ''} auditada${r.n > 1 ? 's' : ''}` : 'Sin relevar'}</small></div>
               <div class="pdv-bar">${r.n ? seg('ok', r.cc, r.n) + seg('warn', r.pp, r.n) + seg('bad', r.nn, r.n) + seg('mut', r.ss, r.n) : ''}</div>
-              <div class="pdv-p ${tonoPct(r.pc)}">${r.pc === null ? '–' : r.pc + '%'}<small>${r.cc} de ${r.cc + r.pp + r.nn}</small></div></div>`).join('') : '<div class="empty">Sin puntos de venta</div>'}</section>${secNotas}`;
+              <div class="pdv-p ${tonoPct(r.pc)}">${r.pc === null ? '–' : r.pc + '%'}<small>${r.cc} de ${r.cc + r.pp + r.nn}</small></div></div>`).join('')}</section>` : ''}${secNotas}`;
 
     // ── Evaluación: análisis de góndolas + comparativa planograma vs foto ──
     const secEval = `<section><h1>Evaluación</h1><p class="sub">Análisis de góndolas y comparativa del planograma ideal con lo auditado.</p>${filtros}</section>
@@ -527,7 +541,7 @@
     };
     const secDet = `<section><h1>Detalle de punto de venta</h1><p class="sub">Resultados, fotos y evidencias de cada visita.</p>
             <div class="filt"><label class="f-sel"><span>Punto de venta</span><select id="detsel">${pdvsAll.map((q) => `<option ${q === detNombre ? 'selected' : ''}>${esc(q)}</option>`).join('')}</select></label></div>
-            <div class="k-grid k3">
+            <div class="k-grid k4">
               ${kpi('az', 'foto', 'Relevamientos', VD.length)}
               ${kpi('ok', 'cumple', 'Cumplimiento', dpc === null ? '–' : dpc + '%', dpc === null ? '' : `<div class="k-bar"><b class="ok" style="width:${dpc}%"></b></div>`)}
               ${kpi('bad', 'warn', 'No cumple', dn)}
@@ -571,6 +585,7 @@
       f.hasta = b.dataset.p === 'hoy' ? hoy : '';
       pintarTablero();
     });
+    $app.querySelectorAll('[data-cad]').forEach((b) => b.onclick = () => { state.cadena = b.dataset.cad && state.cadena !== b.dataset.cad ? b.dataset.cad : ''; pintarTablero(); const s = document.getElementById(state.cadena ? 's-pdv' : 's-cad'); if (s) s.scrollIntoView({ block: 'nearest' }); });
     $app.querySelectorAll('[data-o]').forEach((b) => b.onclick = () => { state.orden = b.dataset.o; pintarTablero(); });
     $app.querySelectorAll('[data-v]').forEach((b) => b.onclick = () => { state.vista = b.dataset.v; pintarTablero(); window.scrollTo(0, 0); });
     $app.querySelectorAll('[data-det]').forEach((b) => b.onclick = () => { state.det = b.dataset.det; state.vista = 'det'; pintarTablero(); window.scrollTo(0, 0); });

@@ -474,3 +474,13 @@ body.dash .g-item.on { border-color: #3cb3a8; box-shadow: 0 0 0 3px rgba(60,179,
 .tile::after { order: 4; content: '›'; color: #9fb3c4; font-size: 1.5rem; line-height: 1; }
 .tile .hecho { order: 3; position: static; width: 22px; height: 22px; padding: 0; display: grid; place-items: center; font-size: 0; border-radius: 50%; background: #22a447; color: #fff; }
 .tile .hecho::before { content: '✓'; font-size: 13px; font-weight: 800; }
+
+/* Estado por cadena (resumen del tablero) */
+.cad-g { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; margin-top: 12px; }
+.cad { display: flex; flex-direction: column; gap: 8px; text-align: left; padding: 14px; background: #fff; border: 1px solid #e6ebe9; border-radius: 14px; cursor: pointer; font: inherit; }
+.cad:hover { border-color: #b9c8c4; }
+.cad.on { border-color: #3a63b8; box-shadow: 0 0 0 2px #e3ebfb; }
+.cad-t { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.cad-t span { font-weight: 700; } .cad-t .ok { color: #1d7f3e; } .cad-t .warn { color: #b57d0a; } .cad-t .bad { color: #c03a3a; } .cad-t .mut { color: #8a9996; }
+.cad .k-bar b.warn { background: #d89b14; } .cad .k-bar b.bad { background: #d64545; }
+.cad small { color: #8a9996; font-size: 12px; }
