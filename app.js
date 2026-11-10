@@ -7,7 +7,8 @@
   const fmtFecha = (ts) => new Date(ts).toLocaleString('es-PY', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
   const diaISO = (ts) => { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const tipoDe = (id) => C.TIPOS.find((t) => t.id === id || t.nombre === id);
-  const tiposDeMarca = (marca) => { const ids = C.ESPACIOS_POR_MARCA[marca]; return ids ? C.TIPOS.filter((t) => ids.includes(t.id)) : C.TIPOS; };
+  // Todos los espacios aparecen para cualquier marca (sin condicionar por marca).
+  const tiposDeMarca = () => C.TIPOS;
   const criterioDe = (id) => C.CRITERIOS.find((c) => c.id === id) || { id, texto: id };
   const guardado = (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
   const ICON_BACK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>';
@@ -133,25 +134,21 @@
       .filter((x) => x.tipos.length && x.tipos.length < x.total);
     const cerrar = () => { state.hechos = new Set(); state.marca = ''; ir('pdv'); };
     if (!faltan.length) return cerrar();
-    let motivo = '', texto = '';
+    let texto = '';
     const m = document.createElement('div'); m.className = 'modal';
-    const valido = () => motivo === 'no' || (motivo === 'otro' && texto.trim().length >= 3);
+    const valido = () => texto.trim().length >= 5;
     const pintar = () => {
       m.innerHTML = `<div class="modal-card"><button class="x" data-x aria-label="Cerrar">×</button>
-        <h2>¿Por qué no se relevaron todos los espacios?</h2>
+        <h2>¿Por qué no se encontró el espacio?</h2>
         <div class="sub">${faltan.map((x) => `<b>${esc(x.marca)}</b>: faltan ${x.tipos.map((t) => esc(t.nombre)).join(', ')}`).join('<br>')}</div>
-        <div class="opts" style="margin-top:12px">
-          <button class="opt radio ${motivo === 'no' ? 'on' : ''}" data-mo="no"><span class="box"></span>No se encontraron los demás espacios</button>
-          <button class="opt radio ${motivo === 'otro' ? 'on' : ''}" data-mo="otro"><span class="box"></span>Otro</button></div>
-        ${motivo === 'otro' ? `<textarea class="in" id="mtxt" rows="3" placeholder="Escribe el motivo" style="margin-top:10px;width:100%">${esc(texto)}</textarea>` : ''}
+        <textarea class="in" id="mtxt" rows="4" placeholder="Describe por qué no se encontró el espacio (obligatorio)" style="margin-top:12px;width:100%">${esc(texto)}</textarea>
         <button class="btn teal block" data-ok style="margin-top:14px" ${valido() ? '' : 'disabled'}>Finalizar visita</button></div>`;
       m.querySelector('[data-x]').onclick = () => m.remove();
-      m.querySelectorAll('[data-mo]').forEach((b) => b.onclick = () => { motivo = b.dataset.mo; pintar(); m.querySelector('#mtxt')?.focus(); });
       const t = m.querySelector('#mtxt');
       if (t) t.oninput = () => { texto = t.value; m.querySelector('[data-ok]').disabled = !valido(); };
       m.querySelector('[data-ok]').onclick = async (e) => {
         e.target.disabled = true; e.target.textContent = 'Guardando…';
-        const por = motivo === 'no' ? 'No se encontraron los demás espacios' : 'Otro: ' + texto.trim();
+        const por = texto.trim();
         try {
           for (const x of faltan) await S.guardarNota({ pdv: state.pdv, marca: x.marca, tipo: 'Sin relevar: ' + x.tipos.map((q) => q.nombre).join(', '), ci: state.usuario.ci, relevador: state.usuario.nombre, texto: por });
           m.remove(); pintarSync(); cerrar();
@@ -363,6 +360,23 @@
     pintarTablero();
   }
 
+  // Historial del tablero: cada cambio de pestaña se guarda para poder volver y avanzar (flechas y boton atras del navegador).
+  const hist = { n: 0, max: 0 };
+  const instantanea = () => ({ n: hist.n, vista: state.vista || 'resumen', det: state.det || '', tipo: state.tab.tipo || '' });
+  function navegar(cambio) {
+    if (!history.state || history.state.tablero === undefined) history.replaceState({ tablero: instantanea() }, '');
+    cambio();
+    hist.n += 1; hist.max = hist.n;
+    history.pushState({ tablero: instantanea() }, '');
+    pintarTablero(); window.scrollTo(0, 0);
+  }
+  window.addEventListener('popstate', (e) => {
+    const t = e.state && e.state.tablero;
+    if (!t || document.body.dataset.page !== 'tablero') return;
+    hist.n = t.n; state.vista = t.vista; state.det = t.det; state.tab.tipo = t.tipo;
+    pintarTablero(); window.scrollTo(0, 0);
+  });
+
   function pintarTablero() {
     document.body.classList.add('dash');
     const f = state.tab, todas = state.datos || [];
@@ -421,7 +435,7 @@
     let respTot = 0, respOk = 0;
     V.forEach((v) => C.PREGUNTAS.forEach((q) => { const o = q.opciones.find((x) => v.criterios.includes(x.id)); if (o) { respTot++; if (o.tono === 'ok') respOk++; } }));
     const pctResp = pct(respOk, respTot);
-    const kpi = (cls, icono, titulo, valor, extra) => `<div class="k-card"><div class="k-top"><span>${titulo}</span><i class="k-ico ${cls}">${svg(icono, 18)}</i></div><div class="k-row"><div class="k-val">${valor}</div>${extra || ''}</div></div>`;
+    const kpi = (cls, icono, titulo, valor, extra, ir) => `<${ir ? `button type="button" class="k-card k-link" data-v="${ir}" title="Ver ${titulo.toLowerCase()}"` : 'div class="k-card"'}><div class="k-top"><span>${titulo}</span><i class="k-ico ${cls}">${svg(icono, 18)}</i></div><div class="k-row"><div class="k-val">${valor}</div>${extra || ''}</div></${ir ? 'button' : 'div'}>`;
 
     // ── Estado por punto de venta ──
     const filasPdv = pdvsVista.map((nombre) => {
@@ -506,17 +520,17 @@
 
     // ── Visitas incompletas: motivo por el que no se relevaron todos los espacios ──
     const notas = (S.notas || []).filter((x) => (!f.desde || diaISO(x.ts) >= f.desde) && (!f.hasta || diaISO(x.ts) <= f.hasta) && (!f.pdv || x.pdv === f.pdv) && (!f.marca || x.marca === f.marca)).sort((a, b) => b.ts - a.ts);
-    const secNotas = `<section class="panel"><div class="p-head"><i class="k-ico warn">${svg('warn', 18)}</i><div><h2>Espacios sin relevar</h2><p>Motivo que indicó el relevador al finalizar la visita.</p></div></div>
-            ${notas.length ? notas.map((x) => `<div class="vis"><div class="vis-h"><div><b>${esc(x.pdv)} · ${esc(x.marca || '')}</b><small>${fmtFecha(x.ts)}</small></div><span class="chip org">${esc(String(x.tipo || '').replace(/^Sin relevar: /, ''))}</span></div><div class="an-box" style="min-height:0">${esc(x.texto)}</div></div>`).join('') : '<div class="empty">Sin justificaciones registradas</div>'}</section>`;
+    const secNotas = `<section class="panel"><div class="p-head"><i class="k-ico warn">${svg('warn', 18)}</i><div><h2>Espacios no encontrados</h2><p>Puntos de venta visitados donde no se encontró el espacio, con la justificación del motivo.</p></div></div>
+            ${notas.length ? notas.map((x) => `<div class="vis"><div class="vis-h"><div><b>${esc(x.pdv)} · ${esc(x.marca || '')}</b><small>${fmtFecha(x.ts)}</small></div><span class="chip org">${esc(String(x.tipo || '').replace(/^Sin relevar: /, ''))}</span></div><div class="an-l" style="margin-top:8px">Justificación</div><div class="an-box" style="min-height:0">${esc(x.texto)}</div></div>`).join('') : '<div class="empty">No hay espacios no encontrados en este período</div>'}</section>`;
 
     // ── Resumen: indicadores y estado por punto de venta (con filtro) ──
-    const secResumen = `<section><h1>Resumen</h1><p class="sub">Cumplimiento de rutas y relevamientos del período.</p>
+    const secResumen = `<section><h1>Resumen</h1><p class="sub">Avance del relevamiento y resultados del período.</p>
             <div class="k-grid k4">
-              ${kpi('az', 'pin', 'Total de puntos de venta', pdvsVista.length)}
-              ${kpi('ok', 'pin', 'Cumplimiento de rutas', pctRuta === null ? '–' : pctRuta + '%', `<div class="k-bar"><b class="ok" style="width:${pctRuta || 0}%"></b></div>`)}
-              ${kpi('az', 'foto', 'Cantidad de relevamientos', n)}
-              ${kpi('warn', 'cumple', 'Promedio de respuestas favorables', pctResp === null ? '–' : pctResp + '%', `<div class="k-bar"><b class="ok" style="width:${pctResp || 0}%"></b></div>`)}
-            </div><div class="k-nota">Rutas: ${relevados} de ${pdvsVista.length} puntos de venta relevados. Promedio: respuestas favorables sobre el total de respuestas.</div></section>
+              ${kpi('az', 'pin', 'Total de puntos de venta', pdvsVista.length, '', 'det')}
+              ${kpi('ok', 'pin', 'Puntos de venta relevados', `${relevados} <small>de ${pdvsVista.length}</small>`, `<div class="k-bar"><b class="ok" style="width:${pctRuta || 0}%"></b></div>`, 'det')}
+              ${kpi('az', 'foto', 'Espacios relevados', n, '', 'esp')}
+              ${kpi('warn', 'cumple', 'Respuestas favorables', pctResp === null ? '–' : pctResp + '%', `<div class="k-bar"><b class="ok" style="width:${pctResp || 0}%"></b></div>`, 'eval')}
+            </div><div class="k-nota">Avance: ${pctRuta === null ? '–' : pctRuta + '%'} de los puntos de venta ya relevados. Respuestas favorables: porcentaje sobre el total de respuestas dadas.</div></section>
           <section class="panel" id="s-mar"><div class="p-head"><i class="k-ico warn">${svg('foto', 18)}</i><div><h2>Marcas con más relevamientos</h2><p>Cantidad de góndolas relevadas por marca en el período.</p></div></div>
             ${marcasR.length ? marcasR.map((z) => `<div class="mr-row"><span>${esc(z.m)}</span><div class="mr-t"><i style="width:${(z.n / marcasR[0].n) * 100}%"></i></div><b>${z.n}</b></div>`).join('') : '<div class="empty">Sin relevamientos</div>'}</section>
           <section class="panel" id="s-cad"><div class="p-head"><i class="k-ico az">${svg('grid', 18)}</i><div><h2>Estado por cadena</h2><p>Toca una cadena para ver sus puntos de venta.</p></div></div>
@@ -582,7 +596,7 @@
         <div class="side-sec">Principal</div>${nav('resumen', 'grid', 'Resumen')}${nav('eval', 'cmp', 'Evaluación')}${nav('esp', 'grid', 'Espacios')}${nav('ev', 'img', 'Evidencias')}${nav('det', 'pin', 'Detalle de punto de venta')}
         <div class="side-pie"><div class="side-user"><i>PF</i><div><b>Profarco S.A.</b><small>Vista de cliente</small></div></div><button class="nav-b" id="salir">${svg('out', 19)}<span>Cerrar sesión</span></button></div></aside>
       <div class="main">
-        <header class="bar"><div class="crumb">Profarco <span>/</span> Principal <span>/</span> <b>${vista === 'eval' ? 'Evaluación' : vista === 'esp' ? 'Espacios' : vista === 'ev' ? 'Evidencias' : vista === 'det' ? 'Detalle de punto de venta' : 'Resumen'}</b></div>
+        <header class="bar"><div class="bar-l"><button class="nav-b" id="h-atras" aria-label="Volver" title="Volver" ${hist.n > 0 ? '' : 'disabled'}>←</button><button class="nav-b" id="h-adel" aria-label="Avanzar" title="Avanzar" ${hist.n < hist.max ? '' : 'disabled'}>→</button><div class="crumb">Profarco <span>/</span> Principal <span>/</span> <b>${vista === 'eval' ? 'Evaluación' : vista === 'esp' ? 'Espacios' : vista === 'ev' ? 'Evidencias' : vista === 'det' ? 'Detalle de punto de venta' : 'Resumen'}</b></div></div>
           <div class="bar-r"><div class="seg">${per('hoy', 'Hoy')}${per('mes', 'Este mes')}${per('todo', 'Todo')}</div>
 </div></header>
         <div class="content">${vista === 'eval' ? secEval : vista === 'esp' ? secEsp : vista === 'ev' ? secEv : vista === 'det' ? secDet : secResumen}</div></div></div>`;
@@ -596,9 +610,11 @@
     });
     $app.querySelectorAll('[data-cad]').forEach((b) => b.onclick = () => { state.cadena = b.dataset.cad && state.cadena !== b.dataset.cad ? b.dataset.cad : ''; pintarTablero(); const s = document.getElementById(state.cadena ? 's-pdv' : 's-cad'); if (s) s.scrollIntoView({ block: 'nearest' }); });
     $app.querySelectorAll('[data-o]').forEach((b) => b.onclick = () => { state.orden = b.dataset.o; pintarTablero(); });
-    $app.querySelectorAll('[data-v]').forEach((b) => b.onclick = () => { state.vista = b.dataset.v; pintarTablero(); window.scrollTo(0, 0); });
-    $app.querySelectorAll('[data-det]').forEach((b) => b.onclick = () => { state.det = b.dataset.det; state.vista = 'det'; pintarTablero(); window.scrollTo(0, 0); });
-    $app.querySelectorAll('[data-esp]').forEach((b) => b.onclick = () => { f.tipo = b.dataset.esp; state.vista = 'ev'; pintarTablero(); window.scrollTo(0, 0); });
+    document.getElementById('h-atras').onclick = () => history.back();
+    document.getElementById('h-adel').onclick = () => history.forward();
+    $app.querySelectorAll('[data-v]').forEach((b) => b.onclick = () => { if ((state.vista || 'resumen') !== b.dataset.v) navegar(() => { state.vista = b.dataset.v; }); });
+    $app.querySelectorAll('[data-det]').forEach((b) => b.onclick = () => navegar(() => { state.det = b.dataset.det; state.vista = 'det'; }));
+    $app.querySelectorAll('[data-esp]').forEach((b) => b.onclick = () => navegar(() => { f.tipo = b.dataset.esp; state.vista = 'ev'; }));
     const ds = document.getElementById('detsel'); if (ds) ds.onchange = () => { state.det = ds.value; pintarTablero(); };
     $app.querySelectorAll('[data-g]').forEach((b) => b.onclick = () => {
       const x = todas.find((q) => q.id === b.dataset.g); if (!x) return;
