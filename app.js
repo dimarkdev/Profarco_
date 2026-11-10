@@ -244,7 +244,8 @@
     el.className = 'cam';
     el.innerHTML = `<div class="cam-top"><div class="cam-pill">Tomar foto de: ${esc(state.marca)} · ${esc(state.tipo.nombre)}</div></div>
       <div class="cam-view"><video playsinline muted autoplay></video><div class="cam-grid"><i></i><i></i><i></i><i></i></div><div class="flash"></div>
-        <button class="cam-ref" data-ref>${ICON_IMG} Ver referencia</button><div class="cam-msg hide" data-msg></div>
+        <button class="cam-ref" data-ref>${ICON_IMG} Ver referencia</button><div class="cam-count" data-count></div><div class="cam-msg hide" data-msg></div>
+        <div class="cam-zoom hide" data-zoom><button type="button" data-zm aria-label="Alejar">−</button><input type="range" min="1" max="4" step="0.1" value="1" data-zr aria-label="Zoom"><button type="button" data-zp aria-label="Acercar">+</button><span data-zv>1×</span></div>
         <div class="cam-bar"><button class="btn" data-cerrar>Cerrar</button><button class="shutter" data-disp aria-label="Tomar foto"></button><button class="btn listo hide" data-listo></button></div></div>
       <input type="file" accept="image/*" capture="environment" class="hide" data-file>`;
     document.body.appendChild(el);
@@ -253,8 +254,33 @@
     let stream = null;
     const parar = () => stream?.getTracks().forEach((t) => t.stop());
     const salir = () => { parar(); el.remove(); };
-    const actualizar = () => { const b = q('[data-listo]'); b.classList.toggle('hide', !state.fotos.length); b.textContent = `Listo · ${state.fotos.length}/${C.MAX_FOTOS}`; q('[data-disp]').classList.toggle('lleno', state.fotos.length >= C.MAX_FOTOS); };
-    const agregar = (blob) => { if (state.fotos.length >= C.MAX_FOTOS) { toast(`Máximo ${C.MAX_FOTOS} fotos por relevamiento`); return; } state.fotos.push({ blob, url: URL.createObjectURL(blob) }); actualizar(); const f = q('.flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); };
+    const actualizar = () => { q('[data-count]').textContent = `Fotos ${state.fotos.length}/${C.MAX_FOTOS}`; const b = q('[data-listo]'); b.classList.toggle('hide', !state.fotos.length); b.textContent = `Listo · ${state.fotos.length}/${C.MAX_FOTOS}`; q('[data-disp]').classList.toggle('lleno', state.fotos.length >= C.MAX_FOTOS); };
+    const agregar = (blob) => { if (state.fotos.length >= C.MAX_FOTOS) { toast(`Máximo ${C.MAX_FOTOS} fotos por relevamiento`); return; } state.fotos.push({ blob, url: URL.createObjectURL(blob) }); actualizar(); toast(`Foto ${state.fotos.length}/${C.MAX_FOTOS} tomada`); const f = q('.flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); };
+
+    // Zoom: con el zoom real de la camara si el telefono lo da; si no, zoom digital (recorte al centro).
+    let zoom = 1, hw = null;
+    const setZoom = (z) => {
+      const r = q('[data-zr]'); z = Math.min(+r.max, Math.max(+r.min, z)); zoom = z; r.value = z;
+      q('[data-zv]').textContent = z.toFixed(1).replace(/\.0$/, '') + '×';
+      if (hw) stream.getVideoTracks()[0].applyConstraints({ advanced: [{ zoom: z }] }).catch(() => {});
+      else video.style.transform = z > 1 ? `scale(${z})` : '';
+    };
+    const iniciarZoom = () => {
+      const r = q('[data-zr]'), cap = (stream.getVideoTracks()[0].getCapabilities && stream.getVideoTracks()[0].getCapabilities()) || {};
+      if (cap.zoom && cap.zoom.max > cap.zoom.min) { hw = true; r.min = cap.zoom.min; r.max = Math.min(cap.zoom.max, 6); r.step = cap.zoom.step || 0.1; r.value = cap.zoom.min; zoom = cap.zoom.min; }
+      q('[data-zoom]').classList.remove('hide');
+      r.oninput = () => setZoom(+r.value);
+      q('[data-zm]').onclick = () => setZoom(zoom - 0.5);
+      q('[data-zp]').onclick = () => setZoom(zoom + 0.5);
+      // Pellizco con dos dedos sobre la imagen.
+      const dedos = new Map(); let d0 = 0, z0 = 1;
+      const dist = () => { const [a, b] = [...dedos.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+      const vista = q('.cam-view');
+      vista.addEventListener('pointerdown', (e) => { dedos.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (dedos.size === 2) { d0 = dist(); z0 = zoom; } });
+      vista.addEventListener('pointermove', (e) => { if (!dedos.has(e.pointerId)) return; dedos.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (dedos.size === 2 && d0) setZoom(z0 * dist() / d0); });
+      const suelta = (e) => { dedos.delete(e.pointerId); d0 = 0; };
+      vista.addEventListener('pointerup', suelta); vista.addEventListener('pointercancel', suelta);
+    };
 
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error('sin getUserMedia');
@@ -263,14 +289,16 @@
     } catch (e) {
       video.remove();
       const m = q('[data-msg]'); m.classList.remove('hide');
+      iniciarZoom();
       m.innerHTML = '<div><p>No se pudo abrir la cámara dentro de la app.</p><p class="muted" style="color:rgba(255,255,255,.7)">Usa el botón blanco para tomar la foto con la cámara del teléfono.</p></div>';
     }
 
     q('[data-disp]').onclick = () => {
       if (!stream || !video.videoWidth) return q('[data-file]').click();
       const cv = document.createElement('canvas');
-      cv.width = video.videoWidth; cv.height = video.videoHeight;
-      cv.getContext('2d').drawImage(video, 0, 0);
+      const vw = video.videoWidth, vh = video.videoHeight, k = hw ? 1 : zoom;   // zoom digital: se recorta el centro
+      cv.width = Math.round(vw / k); cv.height = Math.round(vh / k);
+      cv.getContext('2d').drawImage(video, (vw - cv.width) / 2, (vh - cv.height) / 2, cv.width, cv.height, 0, 0, cv.width, cv.height);
       cv.toBlob((b) => b && agregar(b), 'image/jpeg', C.FOTO_CALIDAD);
     };
     q('[data-file]').onchange = (e) => { for (const f of e.target.files) agregar(f); e.target.value = ''; };
