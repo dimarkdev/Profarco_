@@ -18,7 +18,7 @@ window.CONFIG = {
 
   // Marcas que se relevan (el relevador elige una despues del punto de venta).
   MARCAS: ['Bauducco', 'Bettanin', 'Fini', 'Kellogg’s', 'M&M’s', 'Nosotras', 'Pedigree', 'Panasonic', 'Broterra',
-    'Halls', 'Trident', 'Bubbaloo', 'Whiskas', 'Parmalat', 'Invicta', 'Zumuva', 'Snickers'],
+    'Halls', 'Trident', 'Bubbaloo', 'Whiskas', 'Parmalat', 'Invicta', 'Zumuva', 'Snickers', 'Multimarcas'],
 
   // Tipos de espacio (despues de la marca). El id va en los datos: no lo cambies una vez que haya registros.
   TIPOS: [
