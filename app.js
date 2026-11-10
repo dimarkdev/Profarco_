@@ -14,6 +14,9 @@
   const claveTipo = (s) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim().split(' ').map((w) => w.replace(/s$/, '')).join(' ').replace(/^(bandeja|lateral)$/, 'bandeja lateral');
   const esperadosDe = (pdv) => { const p = ((state.usuario && state.usuario.pdvs) || []).find((x) => x.nombre === pdv); return p && p.esperados && p.esperados.length ? p.esperados : null; };
   const esperado = (pdv, marca, tipo) => { const e = esperadosDe(pdv); return !e || e.some((x) => claveMarca(x.m) === claveMarca(marca) && claveTipo(x.t) === claveTipo(tipo.nombre || tipo)); };
+  const marcaDelPunto = (pdv, marca) => { const e = esperadosDe(pdv); return !!e && e.some((x) => claveMarca(x.m) === claveMarca(marca)); };
+  // Primero lo que corresponde al punto de venta; el resto (opaco) va despues, sin cambiar su orden.
+  const primeroLosDelPunto = (arr, esDelPunto) => arr.map((x, i) => [x, i]).sort((a, b) => (esDelPunto(b[0]) - esDelPunto(a[0])) || (a[1] - b[1])).map((p) => p[0]);
   const tiposEsperados = (pdv, marca) => C.TIPOS.filter((t) => esperado(pdv, marca, t));
   const criterioDe = (id) => C.CRITERIOS.find((c) => c.id === id) || { id, texto: id };
   const guardado = (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
@@ -169,7 +172,7 @@
     const hecha = (m) => [...state.hechos].some((h) => h.startsWith(m + '|'));
     $app.innerHTML = `<div class="wrap"><h1>Marca</h1><p class="lead">¿Qué marca vas a relevar?</p>
       <div class="row" style="margin-top:22px"><button class="back" id="atras" aria-label="Volver">${ICON_BACK}</button><div class="sede">${esc(state.pdv)}</div></div>
-      <div class="marcas">${C.MARCAS.map((m) => `<button class="marca-b ${hecha(m) ? 'hecha' : ''}" data-m="${esc(m)}">${esc(m)}${hecha(m) ? '<i>✓</i>' : ''}</button>`).join('')}</div>
+      <div class="marcas">${primeroLosDelPunto(C.MARCAS, (m) => marcaDelPunto(state.pdv, m) || !esperadosDe(state.pdv)).map((m) => `<button class="marca-b ${hecha(m) ? 'hecha' : ''} ${marcaDelPunto(state.pdv, m) ? 'asignada' : ''}" data-m="${esc(m)}">${esc(m)}${hecha(m) ? '<i>✓</i>' : ''}</button>`).join('')}</div>
       ${state.hechos.size ? '<button class="btn primary block" id="fin" style="margin-top:22px">Finalizar visita</button>' : ''}</div>`;
     document.getElementById('atras').onclick = () => ir('pdv');
     document.getElementById('fin')?.addEventListener('click', finalizarVisita);
@@ -181,7 +184,7 @@
     $app.innerHTML = `<div class="wrap"><h1>Tipo de espacio</h1><p class="lead">Selecciona el espacio a auditar</p>
       <div class="row" style="margin-top:22px"><button class="back" id="atras" aria-label="Volver">${ICON_BACK}</button><div class="sede">${esc(state.pdv)}</div></div>
       <div class="sede-sub"><span>${esc(state.marca)}</span></div>
-      <div class="tiles">${tiposDeMarca(state.marca).map((t) => `<button class="tile ${t.img ? '' : 'sin-img'} ${esperado(state.pdv, state.marca, t) ? '' : 'fuera'}" data-t="${t.id}" style="background:${t.color}">${state.hechos.has(state.marca + '|' + t.id) ? '<span class="hecho">✓ Relevado</span>' : ''}${t.img ? `<img src="${t.img}" alt="">` : `<span class="tile-ico">${ico}</span>`}<b>${esc(t.nombre)}</b></button>`).join('')}</div>
+      <div class="tiles">${primeroLosDelPunto(tiposDeMarca(state.marca), (t) => esperado(state.pdv, state.marca, t)).map((t) => `<button class="tile ${t.img ? '' : 'sin-img'} ${esperado(state.pdv, state.marca, t) ? '' : 'fuera'}" data-t="${t.id}" style="background:${t.color}">${state.hechos.has(state.marca + '|' + t.id) ? '<span class="hecho">✓ Relevado</span>' : ''}${t.img ? `<img src="${t.img}" alt="">` : `<span class="tile-ico">${ico}</span>`}<b>${esc(t.nombre)}</b></button>`).join('')}</div>
       ${state.hechos.size ? '<button class="btn primary block" id="fin" style="margin-top:22px">Finalizar visita</button>' : ''}</div>`;
     document.getElementById('atras').onclick = () => ir('marca');
     document.getElementById('fin')?.addEventListener('click', finalizarVisita);

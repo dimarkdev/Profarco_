@@ -420,7 +420,8 @@ body.dash .g-item.on { border-color: #3cb3a8; box-shadow: 0 0 0 3px rgba(60,179,
 .marcas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
 .marca-b { position: relative; min-height: 58px; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: var(--r-md); background: var(--surface); font-weight: 650; font-size: 13px; text-align: center; }
 .marca-b:active { border-color: var(--teal); }
-.marca-b.hecha { border-color: #22a447; background: #effaf2; }
+.marca-b.asignada { border-color: #b7dcc2; background: #f1faf4; }
+.marca-b.hecha { border-color: #22a447; background: #dcf3e3; }
 .marca-b i { position: absolute; top: 6px; right: 9px; font-style: normal; font-size: 12px; font-weight: 700; color: #1d7f3e; }
 .sede-sub { margin: 8px 0 0; text-align: center; }
 .sede-sub span { display: inline-block; padding: 4px 14px; border-radius: 999px; background: rgba(60,179,168,.15); color: var(--teal-dark); font-weight: 700; font-size: 12.5px; }
