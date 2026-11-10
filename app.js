@@ -187,6 +187,7 @@
       <div class="tiles">${primeroLosDelPunto(tiposDeMarca(state.marca), (t) => esperado(state.pdv, state.marca, t)).map((t) => `<button class="tile ${t.img ? '' : 'sin-img'} ${esperado(state.pdv, state.marca, t) ? '' : 'fuera'}" data-t="${t.id}" style="background:${t.color}">${state.hechos.has(state.marca + '|' + t.id) ? '<span class="hecho">✓ Relevado</span>' : ''}${t.img ? `<img src="${t.img}" alt="">` : `<span class="tile-ico">${ico}</span>`}<b>${esc(t.nombre)}</b></button>`).join('')}</div>
       ${state.hechos.size ? '<button class="btn primary block" id="fin" style="margin-top:22px">Finalizar visita</button>' : ''}</div>`;
     document.getElementById('atras').onclick = () => ir('marca');
+    precargarPlanos();
     document.getElementById('fin')?.addEventListener('click', finalizarVisita);
     $app.querySelectorAll('[data-t]').forEach((b) => b.onclick = () => {
       const t = tipoDe(b.dataset.t);
@@ -196,6 +197,7 @@
 
   // Espacio que no figura en la lista del punto de venta: se puede agregar justificando el motivo.
   function confirmarExtra(t) {
+    if (document.querySelector('.modal')) return;
     let texto = '';
     const m = document.createElement('div'); m.className = 'modal';
     m.innerHTML = `<div class="modal-card"><button class="x" data-x aria-label="Cerrar">×</button>
@@ -210,13 +212,22 @@
     document.body.appendChild(m);
   }
 
+  // Al elegir la marca se bajan por adelantado los planogramas de los espacios que corresponden: al abrir la ventana ya estan.
+  function precargarPlanos() {
+    if (!esperadosDe(state.pdv)) return;
+    tiposEsperados(state.pdv, state.marca).slice(0, 4).forEach((t) => planosDe(state.pdv, state.marca, t.id).slice(0, 2).forEach((p) => { const im = new Image(); im.src = p.url; }));
+  }
+
   // Ventana "Planograma de Referencia": hay que verla completa para poder abrir la camara.
   async function abrirReferencia() {
+    if (state.abriendoRef) return;   // evita abrir dos ventanas con toques repetidos
+    state.abriendoRef = true;
     if (!state.planosListo && !state.planos.length) { toast('Cargando planogramas…'); await state.planosP; }
     const ps = planosDe(state.pdv, state.marca, state.tipo.id);
     let i = 0; const vistas = new Set([0]);
     const m = document.createElement('div');
     m.className = 'modal';
+    const cerrarRef = () => { m.remove(); state.abriendoRef = false; };
     const pintar = () => {
       vistas.add(i);
       const listo = !ps.length || vistas.size === ps.length;
@@ -228,10 +239,10 @@
           : '<div class="empty">Todavía no hay planograma de referencia de esta marca para este espacio.</div>'}
         <div class="hint">${listo ? (ps.length ? 'Toca la imagen para acercarla' : '') : `Mira las ${ps.length} imágenes para continuar`}</div>
         <button class="btn teal block" data-go ${listo ? '' : 'disabled'}>Entendido, abrir cámara</button></div>`;
-      m.querySelector('[data-x]').onclick = () => m.remove();
+      m.querySelector('[data-x]').onclick = () => cerrarRef();
       m.querySelector('img')?.addEventListener('click', () => lightbox([{ url: ps[i].url }]));
       m.querySelectorAll('[data-n]').forEach((b) => b.onclick = () => { i = (i + +b.dataset.n + ps.length) % ps.length; pintar(); });
-      m.querySelector('[data-go]').onclick = () => { m.remove(); abrirCamara(false); };
+      m.querySelector('[data-go]').onclick = () => { cerrarRef(); abrirCamara(false); };
     };
     pintar();
     document.body.appendChild(m);
@@ -239,6 +250,7 @@
 
   // Camara propia (getUserMedia); si el navegador no la da, cae al selector de camara del sistema.
   async function abrirCamara(sumar) {
+    if (document.querySelector('.cam')) return;
     // sumar = true: viene de "+ Foto" en Cumplimiento; se conservan las fotos ya tomadas.
     const base = sumar ? state.fotos.slice() : [];
     if (!sumar) state.fotos.forEach((f) => URL.revokeObjectURL(f.url));
@@ -300,9 +312,10 @@
       if (!stream || !video.videoWidth) return q('[data-file]').click();
       const cv = document.createElement('canvas');
       const vw = video.videoWidth, vh = video.videoHeight, k = hw ? 1 : zoom;   // zoom digital: se recorta el centro
-      cv.width = Math.round(vw / k); cv.height = Math.round(vh / k);
-      cv.getContext('2d').drawImage(video, (vw - cv.width) / 2, (vh - cv.height) / 2, cv.width, cv.height, 0, 0, cv.width, cv.height);
-      cv.toBlob((b) => b && agregar(b), 'image/jpeg', C.FOTO_CALIDAD);
+      const sw = vw / k, sh = vh / k, e = Math.min(1, C.FOTO_MAX_PX / Math.max(sw, sh));
+      cv.width = Math.round(sw * e); cv.height = Math.round(sh * e);
+      cv.getContext('2d').drawImage(video, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, cv.width, cv.height);
+      cv.toBlob((b) => { if (b) { b.comprimida = true; agregar(b); } }, 'image/jpeg', C.FOTO_CALIDAD);
     };
     q('[data-file]').onchange = (e) => { for (const f of e.target.files) agregar(f); e.target.value = ''; };
     q('[data-ref]').onclick = () => lightbox(planosDe(state.pdv, state.marca, state.tipo.id).map((p, k, a) => ({ url: p.url, caption: `Planograma ${k + 1} de ${a.length}` })));
@@ -336,17 +349,19 @@
     $app.querySelectorAll('[data-del]').forEach((b) => b.onclick = () => { state.fotos.splice(+b.dataset.del, 1); if (!state.fotos.length) ir('tipos'); else pasoCriterios(); });
     document.getElementById('mas').onclick = () => abrirCamara(true);
     document.getElementById('guardar').onclick = async (e) => {
+      if (state.guardando) return;   // un solo envio a la vez: evita registros dobles por toques repetidos
+      state.guardando = true;
       e.target.disabled = true; e.target.textContent = 'Guardando…';
       try {
         const n = state.fotos.length, ids = [...sel];
-        const sync = await S.guardarFotos({ pdv: state.pdv, marca: state.marca, tipo: state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, criterios: [...ids, C.resultado(ids)] }, state.fotos.map((f) => f.blob));
+        await S.guardarFotos({ pdv: state.pdv, marca: state.marca, tipo: state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, criterios: [...ids, C.resultado(ids)] }, state.fotos.map((f) => f.blob));
         const just = (state.extras || {})[state.marca + '|' + state.tipo.id];
         if (just) await S.guardarNota({ pdv: state.pdv, marca: state.marca, tipo: 'Adicional: ' + state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, texto: just });
         state.fotos.forEach((f) => URL.revokeObjectURL(f.url));
         state.fotos = []; state.hechos.add(state.marca + '|' + state.tipo.id);
-        toast(!S.remoto ? `${n} foto(s) guardadas en este dispositivo (modo prueba)` : sync && sync.pendientes ? `Guardado en el teléfono: ${sync.pendientes} foto(s) se subirán cuando haya señal` : `${n} foto(s) guardadas`);
-        pintarSync(); ir('tipos');
-      } catch (err) { toast('No se pudo guardar: ' + err.message); e.target.disabled = false; e.target.textContent = 'Guardar relevamiento'; }
+        toast(!S.remoto ? `${n} foto(s) guardadas en este dispositivo (modo prueba)` : navigator.onLine ? 'Relevamiento guardado. Se está subiendo en segundo plano.' : `Guardado en el teléfono: ${n} foto(s) se subirán cuando haya señal`);
+        pintarSync(); state.guardando = false; ir('tipos');
+      } catch (err) { state.guardando = false; toast('No se pudo guardar: ' + err.message); e.target.disabled = false; e.target.textContent = 'Guardar relevamiento'; }
     };
   }
 

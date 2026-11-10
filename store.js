@@ -142,14 +142,17 @@
     // ── Fotos ──  meta: {pdv, marca, tipo, ci, relevador, criterios: [ids]}
     async guardarFotos(meta, blobs) {
       for (const b of blobs) {
-        await DB.put('fotos', { id: uid(), ...meta, ts: Date.now(), blob: await comprimir(b), subida: false });
+        await DB.put('fotos', { id: uid(), ...meta, ts: Date.now(), blob: b.comprimida ? b : await comprimir(b), subida: false });
       }
-      return Store.sincronizar();
+      // Se guarda en el telefono al instante y la subida a Drive sigue por detras: la pantalla no espera al servidor.
+      Store.sincronizar().then(() => window.dispatchEvent(new Event('sync')));
+      return { guardadas: blobs.length };
     },
     // Justificacion de espacios no relevados (sin foto). meta: {pdv, marca, tipo, ci, relevador, texto}
     async guardarNota(meta) {
       await DB.put('fotos', { id: uid(), kind: 'nota', ...meta, ts: Date.now(), subida: false });
-      return Store.sincronizar();
+      Store.sincronizar().then(() => window.dispatchEvent(new Event('sync')));
+      return { guardadas: 1 };
     },
     async fotosLocales() {
       return (await DB.all('fotos')).filter((f) => f.kind !== 'nota').map((f) => ({ ...f, url: urlDe(f.id, f.blob), thumb: urlDe(f.id, f.blob) }));
@@ -164,15 +167,21 @@
       subiendo = (async () => {
         let subidas = 0;
         const envia = (payload) => post(payload).catch(() => post(payload));   // un reintento por si el script tarda o la señal parpadea
-        for (const f of (await DB.all('fotos')).filter((x) => !x.subida)) {
+        let fallo = false;
+        // Se vuelve a revisar la cola hasta vaciarla: lo que se guarda mientras se sube (por ejemplo una justificacion) tambien sale.
+        for (let ronda = 0; ronda < 6 && !fallo; ronda++) {
+          const cola = (await DB.all('fotos')).filter((x) => !x.subida);
+          if (!cola.length) break;
+          for (const f of cola) {
           try {
             await envia(f.kind === 'nota'
-              ? { action: 'nota', pdv: f.pdv, marca: f.marca, tipo: f.tipo, ci: f.ci, relevador: f.relevador, texto: f.texto, ts: f.ts }
-              : { action: 'foto', pdv: f.pdv, marca: f.marca, tipo: f.tipo, ci: f.ci, relevador: f.relevador,
+              ? { action: 'nota', cid: f.id, pdv: f.pdv, marca: f.marca, tipo: f.tipo, ci: f.ci, relevador: f.relevador, texto: f.texto, ts: f.ts }
+              : { action: 'foto', cid: f.id, pdv: f.pdv, marca: f.marca, tipo: f.tipo, ci: f.ci, relevador: f.relevador,
                   criterios: f.criterios, ts: f.ts, nombre: `${f.ts}_${f.id}.jpg`, data: await blobToB64(f.blob) });
             await DB.del('fotos', f.id);
             subidas++;
-          } catch (e) { console.warn('No se pudo subir', f.id, e); break; }
+          } catch (e) { console.warn('No se pudo subir', f.id, e); fallo = true; break; }
+          }
         }
         return { subidas, pendientes: (await DB.all('fotos')).filter((x) => !x.subida).length };
       })().finally(() => { subiendo = null; });

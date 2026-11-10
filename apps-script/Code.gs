@@ -48,7 +48,7 @@ function planillaId_(nombre) {   // el id de cada planilla no cambia: evita reco
   CacheService.getScriptCache().put(k, id, CACHE_PLANOS);
   return id;
 }
-const ENCABEZADO_REGISTRO = ['Fecha y hora', 'Timestamp', 'CI', 'Relevador', 'Punto de venta', 'Marca', 'Tipo de espacio', 'Cumplimiento', 'Observaciones', 'ID foto', 'Criterios (ids)'];
+const ENCABEZADO_REGISTRO = ['Fecha y hora', 'Timestamp', 'CI', 'Relevador', 'Punto de venta', 'Marca', 'Tipo de espacio', 'Cumplimiento', 'Observaciones', 'ID foto', 'Criterios (ids)', 'Clave de envio'];
 const RESULTADOS = { cumple: 'Cumple', parcial: 'Cumple parcialmente', no_cumple: 'No cumple' };
 const TEXTOS = {
   presente_si: 'Marca contratada: si esta', presente_no: 'Marca contratada: no esta',
@@ -159,7 +159,44 @@ function doPost(e) {
   } catch (err) { return json_({ ok: false, error: String(err) }); }
 }
 
+// Anti-duplicados: cada foto o nota trae una clave unica (cid). Si el mismo envio llega dos veces
+// (doble toque, reintento por mala senal), la segunda vez no crea nada y devuelve lo ya guardado.
+function reservar_(cid) {
+  if (!cid) return null;
+  const c = CacheService.getScriptCache(), lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const v = c.get('cid_' + cid);
+    if (v === 'pend') return 'ocupado';
+    if (v) return { id: v };
+    const hoja = SpreadsheetApp.openById(planillaId_('Registro de fotos')).getSheets()[0];
+    if (hoja.getMaxColumns() < 12) hoja.insertColumnsAfter(hoja.getMaxColumns(), 12 - hoja.getMaxColumns());
+    const n = hoja.getLastRow() - 1;
+    if (n > 0) {
+      const col = hoja.getRange(2, 12, n, 1).getValues();
+      for (let i = col.length - 1; i >= 0; i--) {
+        if (String(col[i][0]) === cid) { const id = String(hoja.getRange(i + 2, 10).getValue() || 'nota'); c.put('cid_' + cid, id, 21600); return { id: id }; }
+      }
+    }
+    c.put('cid_' + cid, 'pend', 180);
+    return null;
+  } finally { lock.releaseLock(); }
+}
+function liberar_(cid) { if (cid) try { CacheService.getScriptCache().remove('cid_' + cid); } catch (e) {} }
+function marcar_(cid, id) { if (cid) try { CacheService.getScriptCache().put('cid_' + cid, String(id || 'nota'), 21600); } catch (e) {} }
 function guardarFoto_(b) {
+  const prev = reservar_(b.cid);
+  if (prev === 'ocupado') throw new Error('Esta foto ya se esta guardando');
+  if (prev) return prev.id;
+  try { const id = crearFoto_(b); marcar_(b.cid, id); return id; } catch (e) { liberar_(b.cid); throw e; }
+}
+function guardarNota_(b) {
+  const prev = reservar_(b.cid);
+  if (prev === 'ocupado') throw new Error('Esta justificacion ya se esta guardando');
+  if (prev) return;
+  try { crearNota_(b); marcar_(b.cid, 'nota'); } catch (e) { liberar_(b.cid); throw e; }
+}
+function crearFoto_(b) {
   const fecha = Utilities.formatDate(new Date(b.ts), Session.getScriptTimeZone(), 'yyyy-MM-dd');
   const carpeta = sub_(sub_(sub_(sub_(carpeta_(FOTOS), limpio_(b.pdv)), limpio_(b.marca)), limpio_(b.tipo)), fecha);
   const nombre = limpio_(digitos_(b.ci) + '_' + (b.nombre || b.ts + '.jpg'));
@@ -174,19 +211,19 @@ function guardarFoto_(b) {
   try {
     const hoja = SpreadsheetApp.openById(planillaId_('Registro de fotos')).getSheets()[0];
     if (hoja.getLastRow() < 1 || hoja.getLastColumn() < ENCABEZADO_REGISTRO.length) hoja.getRange(1, 1, 1, ENCABEZADO_REGISTRO.length).setValues([ENCABEZADO_REGISTRO]);
-    hoja.appendRow([Utilities.formatDate(new Date(b.ts), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm'), b.ts, "'" + digitos_(b.ci), b.relevador, b.pdv, b.marca || '', b.tipo, res, obs, f.getId(), crit.join('|')]);
+    hoja.appendRow([Utilities.formatDate(new Date(b.ts), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm'), b.ts, "'" + digitos_(b.ci), b.relevador, b.pdv, b.marca || '', b.tipo, res, obs, f.getId(), crit.join('|'), b.cid || '']);
   } finally { lock.releaseLock(); }
   cacheDel_(['fotos']);
   return f.getId();
 }
 
 // Justificacion de espacios no relevados: una fila en "Registro de fotos" sin ID de foto y con 'justif' en Criterios.
-function guardarNota_(b) {
+function crearNota_(b) {
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
   try {
     const hoja = SpreadsheetApp.openById(planillaId_('Registro de fotos')).getSheets()[0];
     if (hoja.getLastRow() < 1 || hoja.getLastColumn() < ENCABEZADO_REGISTRO.length) hoja.getRange(1, 1, 1, ENCABEZADO_REGISTRO.length).setValues([ENCABEZADO_REGISTRO]);
-    hoja.appendRow([Utilities.formatDate(new Date(b.ts), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm'), b.ts, "'" + digitos_(b.ci), b.relevador, b.pdv, b.marca || '', b.tipo, 'Espacios sin relevar', String(b.texto || ''), '', 'justif']);
+    hoja.appendRow([Utilities.formatDate(new Date(b.ts), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm'), b.ts, "'" + digitos_(b.ci), b.relevador, b.pdv, b.marca || '', b.tipo, 'Espacios sin relevar', String(b.texto || ''), '', 'justif', b.cid || '']);
   } finally { lock.releaseLock(); }
   cacheDel_(['fotos']);
 }
