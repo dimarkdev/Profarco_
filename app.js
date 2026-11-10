@@ -289,10 +289,10 @@
       if (!navigator.mediaDevices?.getUserMedia) throw new Error('sin getUserMedia');
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
       video.srcObject = stream;
+      iniciarZoom();
     } catch (e) {
       video.remove();
       const m = q('[data-msg]'); m.classList.remove('hide');
-      iniciarZoom();
       m.innerHTML = '<div><p>No se pudo abrir la cámara dentro de la app.</p><p class="muted" style="color:rgba(255,255,255,.7)">Usa el botón blanco para tomar la foto con la cámara del teléfono.</p></div>';
     }
 
@@ -632,15 +632,15 @@
             </div></section>
           <section class="panel"><div class="p-head"><i class="k-ico ok">${svg('cmp', 18)}</i><div><h2>Relevamientos · ${esc(detNombre)}</h2></div></div>
             ${VD.length ? VD.map(visitaHtml).join('') : '<div class="empty">Este punto de venta todavía no tiene relevamientos.</div>'}</section>
-          <section class="panel" id="s-gal"><div class="p-head"><i class="k-ico mut">${svg('img', 18)}</i><div><h2>Fotos y evidencias</h2><p>${detFotos.length} foto${detFotos.length === 1 ? '' : 's'}. Toca una para verla en grande junto a su planograma.</p></div></div>
-            <div class="galeria">${detFotos.length ? detFotos.map((x) => `<button class="g-item" data-g="${esc(x.id)}"><img src="${esc(x.thumb || x.url)}" loading="lazy" alt=""><div><b>${esc(x.marca || '')} · ${esc(x.tipo)}</b><small class="num">${fmtFecha(x.ts)}${x.pendiente ? ' · por subir' : ''}</small><div class="tags">${tags(x)}</div></div></button>`).join('') : '<div class="empty">Aún no hay fotos</div>'}</div></section>`;
+          <section class="panel" id="s-gal"><div class="p-head"><i class="k-ico mut">${svg('img', 18)}</i><div><h2>Fotos y evidencias</h2><p>${VD.length} relevamiento${VD.length === 1 ? '' : 's'} · ${detFotos.length} foto${detFotos.length === 1 ? '' : 's'}. Toca uno para verlo en grande junto a su planograma.</p></div></div>
+            <div class="galeria">${VD.length ? VD.map((x) => `<button class="g-item" data-g="${esc(x.id)}">${x.fotos.length > 1 ? `<span class="n-fotos">${x.fotos.length} fotos</span>` : ''}<img src="${esc(x.fotos[0].thumb || x.fotos[0].url)}" loading="lazy" alt=""><div><b>${esc(x.marca || '')} · ${esc(x.tipo)}</b><small class="num">${fmtFecha(x.ts)}${x.fotos.some((p) => p.pendiente) ? ' · por subir' : ''}</small><div class="tags">${tags(x)}</div></div></button>`).join('') : '<div class="empty">Aún no hay fotos</div>'}</div></section>`;
 
     // ── Evidencias: fotos por local, marca y espacio ──
     const filtrosEv = `<div class="filt">${select('pdv', 'Punto de venta', opt('pdv'))}${select('marca', 'Marca', opt('marca'))}${select('tipo', 'Tipo de espacio', C.TIPOS.map((t) => t.nombre))}
               <label class="f-sel"><span>Desde</span><input type="date" data-f="desde" value="${f.desde}"></label><label class="f-sel"><span>Hasta</span><input type="date" data-f="hasta" value="${f.hasta}"></label></div>`;
     const secEv = `<section><h1>Evidencias</h1><p class="sub">Fotos relevadas. Filtrá por local, marca y espacio.</p>${filtrosEv}</section>
-          <section class="panel" id="s-gal"><div class="p-head"><i class="k-ico mut">${svg('img', 18)}</i><div><h2>Fotos</h2><p>${lista.length} foto${lista.length === 1 ? '' : 's'}. Toca una para verla junto a su planograma.</p></div></div>
-            <div class="galeria">${lista.length ? lista.map((x) => `<button class="g-item" data-g="${esc(x.id)}"><img src="${esc(x.thumb || x.url)}" loading="lazy" alt=""><div><b>${esc(x.pdv)}</b><small>${esc(x.marca || '')} · ${esc(x.tipo)}</small><small class="num">${fmtFecha(x.ts)}${x.pendiente ? ' · por subir' : ''}</small><div class="tags">${tags(x)}</div></div></button>`).join('') : '<div class="empty">No hay fotos con estos filtros</div>'}</div></section>`;
+          <section class="panel" id="s-gal"><div class="p-head"><i class="k-ico mut">${svg('img', 18)}</i><div><h2>Fotos</h2><p>${V.length} relevamiento${V.length === 1 ? '' : 's'} · ${lista.length} foto${lista.length === 1 ? '' : 's'}. Toca uno para verlo junto a su planograma.</p></div></div>
+            <div class="galeria">${V.length ? V.map((x) => `<button class="g-item" data-g="${esc(x.id)}">${x.fotos.length > 1 ? `<span class="n-fotos">${x.fotos.length} fotos</span>` : ''}<img src="${esc(x.fotos[0].thumb || x.fotos[0].url)}" loading="lazy" alt=""><div><b>${esc(x.pdv)}</b><small>${esc(x.marca || '')} · ${esc(x.tipo)}</small><small class="num">${fmtFecha(x.ts)}${x.fotos.some((p) => p.pendiente) ? ' · por subir' : ''}</small><div class="tags">${tags(x)}</div></div></button>`).join('') : '<div class="empty">No hay fotos con estos filtros</div>'}</div></section>`;
 
     // ── Espacios: resultado por tipo de espacio ──
     const espDe = C.TIPOS.map((t) => { const it = V.filter((v) => mismoTipo(v.tipo, t.nombre)); const rc = it.filter((v) => resDe(v)).length;
@@ -678,9 +678,9 @@
     $app.querySelectorAll('[data-esp]').forEach((b) => b.onclick = () => navegar(() => { f.tipo = b.dataset.esp; state.vista = 'ev'; }));
     const ds = document.getElementById('detsel'); if (ds) ds.onchange = () => { state.det = ds.value; pintarTablero(); };
     $app.querySelectorAll('[data-g]').forEach((b) => b.onclick = () => {
-      const x = todas.find((q) => q.id === b.dataset.g); if (!x) return;
+      const x = agrupar(todas).find((v) => v.fotos.some((p) => p.id === b.dataset.g)); if (!x) return;
       const refs = tipoDe(x.tipo) ? planosDe(x.pdv, x.marca, tipoDe(x.tipo).id) : [];
-      lightbox([...(refs[0] ? [{ url: refs[0].url, caption: 'Planograma ideal' }] : []), { url: x.url, caption: 'Foto auditada · ' + fmtFecha(x.ts), tags: tags(x) }]);
+      lightbox([...(refs[0] ? [{ url: refs[0].url, caption: 'Planograma ideal' }] : []), ...x.fotos.map((p, i) => ({ url: p.url, caption: `Foto auditada${x.fotos.length > 1 ? ` ${i + 1} de ${x.fotos.length}` : ''} · ${fmtFecha(p.ts)}`, tags: i === 0 ? tags(x) : '' }))]);
     });
     $app.querySelectorAll('[data-z]').forEach((im) => im.onclick = () => lightbox([{ url: im.dataset.z }]));
     const sf = document.getElementById('selfoto'); if (sf) sf.onchange = () => { state.sel = sf.value; pintarTablero(); };

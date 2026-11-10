@@ -550,3 +550,6 @@ button.k-link:focus-visible { outline: 2px solid #3cb3a8; outline-offset: 2px; }
 .cam-zoom input { flex: 1; min-width: 0; accent-color: #3cb3a8; }
 .cam-zoom span { min-width: 36px; text-align: right; font-size: 13px; font-weight: 700; }
 
+/* Evidencias: un relevamiento = una tarjeta con sus fotos */
+.g-item { position: relative; }
+.g-item .n-fotos { position: absolute; top: 8px; right: 8px; z-index: 1; background: rgba(0, 0, 0, .6); color: #fff; font-size: 11.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
