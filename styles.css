@@ -536,3 +536,7 @@ body.dash .g-item.on { border-color: #3cb3a8; box-shadow: 0 0 0 3px rgba(60,179,
 button.k-link { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .15s; }
 button.k-link:hover { border-color: #3cb3a8; box-shadow: 0 6px 16px rgba(19, 102, 95, .12); transform: translateY(-1px); }
 button.k-link:focus-visible { outline: 2px solid #3cb3a8; outline-offset: 2px; }
+
+/* Espacios que no figuran en la lista del punto de venta */
+.tile.fuera { opacity: .38; filter: grayscale(.85); }
+.tile.fuera::after { content: 'Fuera de la lista'; position: absolute; left: 10px; bottom: 10px; background: rgba(0, 0, 0, .55); color: #fff; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }

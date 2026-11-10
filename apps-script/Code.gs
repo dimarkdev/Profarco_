@@ -78,6 +78,17 @@ function chequeo_(ok) {
 // La columna "CI supervisor" de Puntos de venta puede traer una o varias cedulas (separadas por coma, punto y coma o espacio).
 function asignado_(celda, ci) { return String(celda || '').split(/[^0-9]+/).filter(String).indexOf(ci) >= 0; }
 function pdvObj_(r) { return { nombre: String(r[0]).trim(), cadena: String(r[1] || ''), ciudad: String(r[2] || '') }; }
+// Planilla opcional "Espacios por punto de venta" (Punto de venta, Marca, Tipo de espacio, Cantidad). Sin planilla: no se condiciona nada.
+function esperados_() {
+  try {
+    const m = {};
+    filas_('Espacios por punto de venta').forEach(function (r) {
+      const p = String(r[0]).trim(); if (!p || !String(r[1]).trim() || !String(r[2]).trim()) return;
+      (m[p] = m[p] || []).push({ m: String(r[1]).trim(), t: String(r[2]).trim(), n: Number(r[3]) || 1 });
+    });
+    return m;
+  } catch (err) { return {}; }
+}
 function activo_(v) { return ['no', 'n', '0', 'false', 'inactivo'].indexOf(String(v).trim().toLowerCase()) < 0; }
 
 // Filas de una planilla de Maestros (sin el encabezado).
@@ -112,7 +123,8 @@ function doPost(e) {
       const ci = digitos_(b.ci);
       const r = filas_('Relevadores').filter(function (x) { return digitos_(x[0]) === ci && activo_(x[2]); })[0];
       if (!r || !ci) return json_({ ok: false, error: 'CI no registrado' });
-      const pdvs = filas_('Puntos de venta').filter(function (x) { return activo_(x[3]) && asignado_(x[4], ci); }).map(pdvObj_);
+      const esp = esperados_();
+      const pdvs = filas_('Puntos de venta').filter(function (x) { return activo_(x[3]) && asignado_(x[4], ci); }).map(function (x) { const o = pdvObj_(x); if (esp[o.nombre]) o.esperados = esp[o.nombre]; return o; });
       return json_({ ok: true, nombre: String(r[1]).trim(), pdvs: pdvs });
     }
     if (b.action === 'foto') return json_({ ok: true, id: guardarFoto_(b) });

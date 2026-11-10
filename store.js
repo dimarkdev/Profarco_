@@ -79,7 +79,7 @@
   // Datos de ejemplo del modo prueba (en Drive salen de las planillas "Relevadores" y "Puntos de venta").
   const PRUEBA = {
     relevadores: [{ ci: '1234567', nombre: 'Relevador de Prueba' }],   // en prueba ve todos los puntos de venta
-    pdvs: [{ nombre: 'Supermercado X', cadena: 'Prueba', ciudad: 'Asunción' }, { nombre: 'Supermercado Y', cadena: 'Prueba', ciudad: 'Luque' }],
+    pdvs: [{ nombre: 'Supermercado X', cadena: 'Prueba', ciudad: 'Asunción', esperados: [{ m: 'Bauducco', t: 'Exhibidor', n: 2 }, { m: 'Bauducco', t: 'Puntera', n: 1 }, { m: 'Trident', t: 'Exhibidor', n: 1 }] }, { nombre: 'Supermercado Y', cadena: 'Prueba', ciudad: 'Luque' }],
   };
 
   const Store = {

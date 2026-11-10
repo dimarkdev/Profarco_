@@ -9,6 +9,12 @@
   const tipoDe = (id) => C.TIPOS.find((t) => t.id === id || t.nombre === id);
   // Todos los espacios aparecen para cualquier marca (sin condicionar por marca).
   const tiposDeMarca = () => C.TIPOS;
+  // Espacios esperados por punto de venta (planilla "Espacios por punto de venta"). Sin datos del punto: todo vale.
+  const claveMarca = (s) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+  const claveTipo = (s) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim().split(' ').map((w) => w.replace(/s$/, '')).join(' ').replace(/^(bandeja|lateral)$/, 'bandeja lateral');
+  const esperadosDe = (pdv) => { const p = ((state.usuario && state.usuario.pdvs) || []).find((x) => x.nombre === pdv); return p && p.esperados && p.esperados.length ? p.esperados : null; };
+  const esperado = (pdv, marca, tipo) => { const e = esperadosDe(pdv); return !e || e.some((x) => claveMarca(x.m) === claveMarca(marca) && claveTipo(x.t) === claveTipo(tipo.nombre || tipo)); };
+  const tiposEsperados = (pdv, marca) => C.TIPOS.filter((t) => esperado(pdv, marca, t));
   const criterioDe = (id) => C.CRITERIOS.find((c) => c.id === id) || { id, texto: id };
   const guardado = (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
   const ICON_BACK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>';
@@ -124,15 +130,15 @@
       <p style="text-align:center;margin-top:24px"><button class="link" id="otro">No soy ${esc(state.usuario.nombre)}</button></p></div>`;
     const q$ = document.getElementById('q');
     q$.oninput = () => { state.filtroPdv = q$.value; const p = q$.selectionStart; pasoPdv(); const n = document.getElementById('q'); n.focus(); n.setSelectionRange(p, p); };
-    $app.querySelectorAll('[data-n]').forEach((b) => b.onclick = () => { state.pdv = b.dataset.n; state.hechos = new Set(); state.marca = ''; ir('marca'); });
+    $app.querySelectorAll('[data-n]').forEach((b) => b.onclick = () => { state.pdv = b.dataset.n; state.hechos = new Set(); state.extras = {}; state.marca = ''; ir('marca'); });
     document.getElementById('otro').onclick = () => { localStorage.removeItem('usuario'); state.usuario = null; ir('ci'); };
   }
 
   // Al finalizar: si de una marca quedaron espacios sin relevar, se pide el motivo (queda guardado y se ve en el tablero).
   function finalizarVisita() {
-    const faltan = C.MARCAS.map((m) => ({ marca: m, total: tiposDeMarca(m).length, tipos: tiposDeMarca(m).filter((t) => !state.hechos.has(m + '|' + t.id)) }))
-      .filter((x) => x.tipos.length && x.tipos.length < x.total);
-    const cerrar = () => { state.hechos = new Set(); state.marca = ''; ir('pdv'); };
+    const faltan = C.MARCAS.map((m) => ({ marca: m, tocada: [...state.hechos].some((h) => h.startsWith(m + '|')), tipos: tiposEsperados(state.pdv, m).filter((t) => !state.hechos.has(m + '|' + t.id)) }))
+      .filter((x) => x.tocada && x.tipos.length);
+    const cerrar = () => { state.hechos = new Set(); state.extras = {}; state.marca = ''; ir('pdv'); };
     if (!faltan.length) return cerrar();
     let texto = '';
     const m = document.createElement('div'); m.className = 'modal';
@@ -175,11 +181,30 @@
     $app.innerHTML = `<div class="wrap"><h1>Tipo de espacio</h1><p class="lead">Selecciona el espacio a auditar</p>
       <div class="row" style="margin-top:22px"><button class="back" id="atras" aria-label="Volver">${ICON_BACK}</button><div class="sede">${esc(state.pdv)}</div></div>
       <div class="sede-sub"><span>${esc(state.marca)}</span></div>
-      <div class="tiles">${tiposDeMarca(state.marca).map((t) => `<button class="tile ${t.img ? '' : 'sin-img'}" data-t="${t.id}" style="background:${t.color}">${state.hechos.has(state.marca + '|' + t.id) ? '<span class="hecho">✓ Relevado</span>' : ''}${t.img ? `<img src="${t.img}" alt="">` : `<span class="tile-ico">${ico}</span>`}<b>${esc(t.nombre)}</b></button>`).join('')}</div>
+      <div class="tiles">${tiposDeMarca(state.marca).map((t) => `<button class="tile ${t.img ? '' : 'sin-img'} ${esperado(state.pdv, state.marca, t) ? '' : 'fuera'}" data-t="${t.id}" style="background:${t.color}">${state.hechos.has(state.marca + '|' + t.id) ? '<span class="hecho">✓ Relevado</span>' : ''}${t.img ? `<img src="${t.img}" alt="">` : `<span class="tile-ico">${ico}</span>`}<b>${esc(t.nombre)}</b></button>`).join('')}</div>
       ${state.hechos.size ? '<button class="btn primary block" id="fin" style="margin-top:22px">Finalizar visita</button>' : ''}</div>`;
     document.getElementById('atras').onclick = () => ir('marca');
     document.getElementById('fin')?.addEventListener('click', finalizarVisita);
-    $app.querySelectorAll('[data-t]').forEach((b) => b.onclick = () => { state.tipo = tipoDe(b.dataset.t); abrirReferencia(); });
+    $app.querySelectorAll('[data-t]').forEach((b) => b.onclick = () => {
+      const t = tipoDe(b.dataset.t);
+      if (esperado(state.pdv, state.marca, t) || (state.extras || {})[state.marca + '|' + t.id]) { state.tipo = t; abrirReferencia(); } else confirmarExtra(t);
+    });
+  }
+
+  // Espacio que no figura en la lista del punto de venta: se puede agregar justificando el motivo.
+  function confirmarExtra(t) {
+    let texto = '';
+    const m = document.createElement('div'); m.className = 'modal';
+    m.innerHTML = `<div class="modal-card"><button class="x" data-x aria-label="Cerrar">×</button>
+      <h2>Este espacio no forma parte de la lista</h2>
+      <div class="sub"><b>${esc(state.marca)}</b> · ${esc(t.nombre)} no figura entre los espacios de ${esc(state.pdv)}. ¿Desea agregarlo y justificar?</div>
+      <textarea class="in" id="xtxt" rows="3" placeholder="Justifica por qué se agrega este espacio (obligatorio)" style="margin-top:12px;width:100%"></textarea>
+      <div class="row" style="margin-top:14px;gap:10px"><button class="btn" data-no>Cancelar</button><button class="btn teal" data-ok disabled>Agregar y relevar</button></div></div>`;
+    const ok = m.querySelector('[data-ok]');
+    m.querySelector('#xtxt').oninput = (e) => { texto = e.target.value; ok.disabled = texto.trim().length < 5; };
+    m.querySelector('[data-x]').onclick = m.querySelector('[data-no]').onclick = () => m.remove();
+    ok.onclick = () => { state.extras = state.extras || {}; state.extras[state.marca + '|' + t.id] = texto.trim(); state.tipo = t; m.remove(); abrirReferencia(); };
+    document.body.appendChild(m);
   }
 
   // Ventana "Planograma de Referencia": hay que verla completa para poder abrir la camara.
@@ -284,6 +309,8 @@
       try {
         const n = state.fotos.length, ids = [...sel];
         const sync = await S.guardarFotos({ pdv: state.pdv, marca: state.marca, tipo: state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, criterios: [...ids, C.resultado(ids)] }, state.fotos.map((f) => f.blob));
+        const just = (state.extras || {})[state.marca + '|' + state.tipo.id];
+        if (just) await S.guardarNota({ pdv: state.pdv, marca: state.marca, tipo: 'Adicional: ' + state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, texto: just });
         state.fotos.forEach((f) => URL.revokeObjectURL(f.url));
         state.fotos = []; state.hechos.add(state.marca + '|' + state.tipo.id);
         toast(!S.remoto ? `${n} foto(s) guardadas en este dispositivo (modo prueba)` : sync && sync.pendientes ? `Guardado en el teléfono: ${sync.pendientes} foto(s) se subirán cuando haya señal` : `${n} foto(s) guardadas`);
@@ -520,8 +547,11 @@
 
     // ── Visitas incompletas: motivo por el que no se relevaron todos los espacios ──
     const notas = (S.notas || []).filter((x) => (!f.desde || diaISO(x.ts) >= f.desde) && (!f.hasta || diaISO(x.ts) <= f.hasta) && (!f.pdv || x.pdv === f.pdv) && (!f.marca || x.marca === f.marca)).sort((a, b) => b.ts - a.ts);
-    const secNotas = `<section class="panel"><div class="p-head"><i class="k-ico warn">${svg('warn', 18)}</i><div><h2>Espacios no encontrados</h2><p>Puntos de venta visitados donde no se encontró el espacio, con la justificación del motivo.</p></div></div>
-            ${notas.length ? notas.map((x) => `<div class="vis"><div class="vis-h"><div><b>${esc(x.pdv)} · ${esc(x.marca || '')}</b><small>${fmtFecha(x.ts)}</small></div><span class="chip org">${esc(String(x.tipo || '').replace(/^Sin relevar: /, ''))}</span></div><div class="an-l" style="margin-top:8px">Justificación</div><div class="an-box" style="min-height:0">${esc(x.texto)}</div></div>`).join('') : '<div class="empty">No hay espacios no encontrados en este período</div>'}</section>`;
+    const panelNotas = (lista, tit, sub, vacio, pref) => `<section class="panel"><div class="p-head"><i class="k-ico warn">${svg('warn', 18)}</i><div><h2>${tit}</h2><p>${sub}</p></div></div>
+            ${lista.length ? lista.map((x) => `<div class="vis"><div class="vis-h"><div><b>${esc(x.pdv)} · ${esc(x.marca || '')}</b><small>${fmtFecha(x.ts)}</small></div><span class="chip org">${esc(String(x.tipo || '').replace(pref, ''))}</span></div><div class="an-l" style="margin-top:8px">Justificación</div><div class="an-box" style="min-height:0">${esc(x.texto)}</div></div>`).join('') : `<div class="empty">${vacio}</div>`}</section>`;
+    const notasAdic = notas.filter((x) => /^Adicional:/.test(x.tipo || ''));
+    const secNotas = panelNotas(notas.filter((x) => !/^Adicional:/.test(x.tipo || '')), 'Espacios no encontrados', 'Puntos de venta visitados donde no se encontró el espacio, con la justificación del motivo.', 'No hay espacios no encontrados en este período', /^Sin relevar: /)
+      + (notasAdic.length ? panelNotas(notasAdic, 'Espacios fuera de la lista', 'Espacios relevados que no figuraban en la lista del punto de venta, con su justificación.', '', /^Adicional: /) : '');
 
     // ── Resumen: indicadores y estado por punto de venta (con filtro) ──
     const secResumen = `<section><h1>Resumen</h1><p class="sub">Avance del relevamiento y resultados del período.</p>
