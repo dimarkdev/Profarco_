@@ -1,0 +1,8 @@
+{
+  "name": "profarco-pruebas",
+  "private": true,
+  "type": "module",
+  "description": "Pruebas automaticas del formulario y del tablero (navegador real con camara simulada y Apps Script simulado).",
+  "scripts": { "test": "node formulario.test.mjs" },
+  "devDependencies": { "playwright-core": "^1.48.0" }
+}
