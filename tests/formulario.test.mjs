@@ -183,16 +183,17 @@ test('Espacios: los del punto primero, el resto opaco con la etiqueta', async ()
     assert.equal((await t.page.$$('.tile.fuera')).length, 12);
   } finally { await t.cerrar(); }
 });
-test('Espacio fuera de la lista: exige justificar (minimo 5 letras) y se puede cancelar', async () => {
+test('Espacio fuera de la lista: se ve normal, el motivo es opcional y se puede cancelar', async () => {
   const t = await nuevo(); try {
-    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Bauducco', 'isla');
+    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Bauducco');
+    assert.equal(await t.page.$('.tile.esp'), null, 'ningun espacio verde: Bauducco no tiene en este punto');
+    assert.equal(await t.page.evaluate(() => getComputedStyle(document.querySelector('.tile.fuera')).opacity), '1', 'no se ve apagado');
+    await t.page.click('.tile[data-t="isla"]');
     await t.page.waitForSelector('.modal');
     assert.match(await texto(t.page, '.modal h2'), /no forma parte de la lista/);
-    assert.ok(await t.page.isDisabled('[data-ok]'));
-    await t.page.fill('#xtxt', 'abc'); assert.ok(await t.page.isDisabled('[data-ok]'));
+    assert.ok(!(await t.page.isDisabled('[data-ok]')), 'se puede seguir sin escribir motivo');
     await t.page.click('[data-no]'); assert.equal(await t.page.$('.modal'), null);
-    await t.page.click('.tile[data-t="isla"]'); await t.page.fill('#xtxt', 'Hay una isla nueva'); assert.ok(!(await t.page.isDisabled('[data-ok]')));
-    await t.page.click('[data-ok]'); await t.page.waitForSelector('.modal [data-go]');
+    await t.page.click('.tile[data-t="isla"]'); await t.page.click('[data-ok]'); await t.page.waitForSelector('.modal [data-go]');
     assert.match(await texto(t.page, '.modal h2'), /Planograma de Referencia/);
   } finally { await t.cerrar(); }
 });

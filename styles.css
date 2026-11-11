@@ -538,9 +538,7 @@ button.k-link { width: 100%; text-align: left; font: inherit; color: inherit; cu
 button.k-link:hover { border-color: #3cb3a8; box-shadow: 0 6px 16px rgba(19, 102, 95, .12); transform: translateY(-1px); }
 button.k-link:focus-visible { outline: 2px solid #3cb3a8; outline-offset: 2px; }
 
-/* Espacios que no figuran en la lista del punto de venta */
-.tile.fuera { opacity: .6; filter: grayscale(.6); }
-.tile.fuera::after { content: 'Fuera de la lista'; position: absolute; left: 10px; bottom: 10px; background: rgba(0, 0, 0, .55); color: #fff; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
+/* Espacios que no figuran en la lista del punto de venta: se ven normales (solo los que corresponden van en verde) */
 
 /* Camara: contador de fotos y zoom */
 .cam-view { touch-action: none; }
@@ -554,7 +552,7 @@ button.k-link:focus-visible { outline: 2px solid #3cb3a8; outline-offset: 2px; }
 .g-item { position: relative; }
 .g-item .n-fotos { position: absolute; top: 8px; right: 8px; z-index: 1; background: rgba(0, 0, 0, .6); color: #fff; font-size: 11.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
 
-/* Espacios que corresponden al punto de venta y la marca: en verde (relevados, con etiqueta). Los demas siguen disponibles. */
+/* Espacios que corresponden al punto de venta y la marca: en verde (relevados, con etiqueta). Los demas se ven normales y se pueden relevar igual. */
 .tile.esp, .tile:has(.hecho) { background: #dff5e6 !important; border: 2px solid #22a447 !important; box-shadow: 0 3px 12px rgba(34, 164, 71, .25); }
 .tile.esp b, .tile:has(.hecho) b { color: #0f5c26; font-weight: 700; }
 .tile.esp img, .tile:has(.hecho) img { background: #b9e8c7; }

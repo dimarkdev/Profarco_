@@ -211,13 +211,13 @@
     const m = document.createElement('div'); m.className = 'modal';
     m.innerHTML = `<div class="modal-card"><button class="x" data-x aria-label="Cerrar">×</button>
       <h2>Este espacio no forma parte de la lista</h2>
-      <div class="sub"><b>${esc(state.marca)}</b> · ${esc(t.nombre)} no figura entre los espacios de ${esc(state.pdv)}. ¿Desea agregarlo y justificar?</div>
-      <textarea class="in" id="xtxt" rows="3" placeholder="Justifica por qué se agrega este espacio (obligatorio)" style="margin-top:12px;width:100%"></textarea>
-      <div class="row" style="margin-top:14px;gap:10px"><button class="btn" data-no>Cancelar</button><button class="btn teal" data-ok disabled>Agregar y relevar</button></div></div>`;
+      <div class="sub"><b>${esc(state.marca)}</b> · ${esc(t.nombre)} no figura entre los espacios de ${esc(state.pdv)}. Puede relevarlo igual.</div>
+      <textarea class="in" id="xtxt" rows="3" placeholder="Motivo (opcional)" style="margin-top:12px;width:100%"></textarea>
+      <div class="row" style="margin-top:14px;gap:10px"><button class="btn" data-no>Cancelar</button><button class="btn teal" data-ok>Relevar igual</button></div></div>`;
     const ok = m.querySelector('[data-ok]');
-    m.querySelector('#xtxt').oninput = (e) => { texto = e.target.value; ok.disabled = texto.trim().length < 5; };
+    m.querySelector('#xtxt').oninput = (e) => { texto = e.target.value; };
     m.querySelector('[data-x]').onclick = m.querySelector('[data-no]').onclick = () => m.remove();
-    ok.onclick = () => { state.extras = state.extras || {}; state.extras[state.marca + '|' + t.id] = texto.trim(); guardarVisita(); state.tipo = t; m.remove(); abrirReferencia(); };
+    ok.onclick = () => { state.extras = state.extras || {}; state.extras[state.marca + '|' + t.id] = texto.trim() || '(sin motivo indicado)'; guardarVisita(); state.tipo = t; m.remove(); abrirReferencia(); };
     document.body.appendChild(m);
   }
 
