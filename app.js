@@ -47,6 +47,10 @@
   // Progreso de la visita (punto de venta, espacios ya relevados y justificaciones): se guarda en el telefono para retomarlo del mismo dia.
   const hoy = () => new Date().toLocaleDateString('sv');
   const guardarVisita = () => { try { if (!state.pdv || !state.usuario) localStorage.removeItem('visita'); else localStorage.setItem('visita', JSON.stringify({ ci: state.usuario.ci, pdv: state.pdv, dia: hoy(), hechos: [...state.hechos], extras: state.extras || {} })); } catch (e) { /* sin almacenamiento: sigue en memoria */ } };
+  // Puntos de venta ya visitados (con al menos un relevamiento guardado): se recuerdan en este telefono para marcarlos con un check.
+  const claveVis = () => 'visitados:' + (state.usuario ? state.usuario.ci : '');
+  const visitados = () => guardado(claveVis()) || {};
+  const marcarVisitado = (pdv) => { try { const v = visitados(); v[pdv] = hoy(); localStorage.setItem(claveVis(), JSON.stringify(v)); } catch (e) { /* sin almacenamiento */ } };
   const retomarVisita = (pdv) => {
     const v = guardado('visita');
     if (!v || !state.usuario || v.ci !== state.usuario.ci || v.dia !== hoy() || (pdv && v.pdv !== pdv)) return false;
@@ -134,10 +138,12 @@
 
   function pasoPdv() {
     const q = state.filtroPdv.toLowerCase();
+    const vis = visitados();
+    const cuando = (d) => d === hoy() ? 'Visitado hoy' : 'Visitado el ' + d.slice(8, 10) + '/' + d.slice(5, 7);
     const lista = (state.usuario.pdvs || []).filter((p) => !q || (p.nombre + ' ' + (p.cadena || '') + ' ' + (p.ciudad || '')).toLowerCase().includes(q));
     $app.innerHTML = `<div class="wrap"><h1>Punto de venta</h1><p class="lead">Hola, ${esc(state.usuario.nombre)}</p>
       <input class="in" id="q" style="margin-top:22px" placeholder="Buscar punto de venta…" value="${esc(state.filtroPdv)}" autocomplete="off">
-      <div class="pdv-list">${lista.length ? lista.map((p) => `<button class="pdv-item" data-n="${esc(p.nombre)}">${esc(p.nombre)}<small>${esc([p.cadena, p.ciudad].filter(Boolean).join(' · '))}</small></button>`).join('')
+      <div class="pdv-list">${lista.length ? lista.map((p) => `<button class="pdv-item ${vis[p.nombre] ? 'visitado' : ''}" data-n="${esc(p.nombre)}">${esc(p.nombre)}<small>${esc([p.cadena, p.ciudad].filter(Boolean).join(' · '))}</small>${vis[p.nombre] ? `<i class="chk">✓</i><em class="cuando">${cuando(vis[p.nombre])}</em>` : ''}</button>`).join('')
         : '<div class="empty">No tienes puntos de venta asignados.<br>Reporta con soporte.</div>'}</div>
       <p style="text-align:center;margin-top:24px"><button class="link" id="otro">No soy ${esc(state.usuario.nombre)}</button></p></div>`;
     const q$ = document.getElementById('q');
@@ -182,6 +188,7 @@
     $app.innerHTML = `<div class="wrap"><h1>Marca</h1><p class="lead">¿Qué marca vas a relevar?</p>
       <div class="row" style="margin-top:22px"><button class="back" id="atras" aria-label="Volver">${ICON_BACK}</button><div class="sede">${esc(state.pdv)}</div></div>
       <div class="marcas">${primeroLosDelPunto(C.MARCAS, (m) => marcaDelPunto(state.pdv, m) || !esperadosDe(state.pdv)).map((m) => `<button class="marca-b ${hecha(m) ? 'hecha' : ''} ${marcaDelPunto(state.pdv, m) ? 'asignada' : ''}" data-m="${esc(m)}">${esc(m)}${hecha(m) ? '<i>✓</i>' : ''}</button>`).join('')}</div>
+      ${esperadosDe(state.pdv) ? '<p class="leyenda"><i class="pto"></i><span>Marca contemplada en este punto de venta</span></p>' : ''}
       ${state.hechos.size ? '<button class="btn primary block" id="fin" style="margin-top:22px">Finalizar visita</button>' : ''}</div>`;
     document.getElementById('atras').onclick = () => ir('pdv');
     document.getElementById('fin')?.addEventListener('click', finalizarVisita);
@@ -193,7 +200,8 @@
     $app.innerHTML = `<div class="wrap"><h1>Tipo de espacio</h1><p class="lead">Selecciona el espacio a auditar</p>
       <div class="row" style="margin-top:22px"><button class="back" id="atras" aria-label="Volver">${ICON_BACK}</button><div class="sede">${esc(state.pdv)}</div></div>
       <div class="sede-sub"><span>${esc(state.marca)}</span></div>
-      <div class="tiles">${primeroLosDelPunto(tiposDeMarca(state.marca), (t) => esperado(state.pdv, state.marca, t)).map((t) => `<button class="tile ${t.img ? '' : 'sin-img'} ${esperado(state.pdv, state.marca, t) ? (esperadosDe(state.pdv) ? 'esp' : '') : 'fuera'}" data-t="${t.id}" style="background:${t.color}">${state.hechos.has(state.marca + '|' + t.id) ? '<span class="hecho">✓ Relevado</span>' : ''}${t.img ? `<img src="${t.img}" alt="">` : `<span class="tile-ico">${ico}</span>`}<b>${esc(t.nombre)}</b></button>`).join('')}</div>
+      <div class="tiles">${primeroLosDelPunto(tiposDeMarca(state.marca), (t) => esperado(state.pdv, state.marca, t)).map((t) => `<button class="tile ${t.img ? '' : 'sin-img'} ${esperado(state.pdv, state.marca, t) ? (esperadosDe(state.pdv) ? 'esp' : '') : 'fuera'}" data-t="${t.id}" style="background:${t.color}">${state.hechos.has(state.marca + '|' + t.id) ? `<span class="hecho">✓ Relevado</span>${esperado(state.pdv, state.marca, t) ? '' : '<span class="adic">Adicional</span>'}` : ''}${t.img ? `<img src="${t.img}" alt="">` : `<span class="tile-ico">${ico}</span>`}<b>${esc(t.nombre)}</b></button>`).join('')}</div>
+      ${esperadosDe(state.pdv) ? '<p class="leyenda"><i class="pto"></i><span>Espacio contemplado en el acuerdo · los demás también se pueden relevar y quedan como adicionales</span></p>' : ''}
       ${state.hechos.size ? '<button class="btn primary block" id="fin" style="margin-top:22px">Finalizar visita</button>' : ''}</div>`;
     document.getElementById('atras').onclick = () => ir('marca');
     precargarPlanos();
@@ -342,11 +350,15 @@
   function pasoCriterios() {
     const sel = state.criterios;
     C.PREGUNTAS.filter((q) => q.si && !sel.has(q.si)).forEach((q) => q.opciones.forEach((o) => sel.delete(o.id)));   // si ya no aplica, se descarta
-    const visibles = C.PREGUNTAS.filter((q) => !q.si || sel.has(q.si));
+    // Algunas respuestas dejan sin sentido otras preguntas (p. ej. "Material sin producto": no hay abastecimiento ni visibilidad que valorar).
+    const omitidas = new Set(C.PREGUNTAS.flatMap((q) => q.opciones.filter((o) => sel.has(o.id) && o.omite).flatMap((o) => o.omite)));
+    C.PREGUNTAS.filter((q) => omitidas.has(q.id)).forEach((q) => q.opciones.forEach((o) => sel.delete(o.id)));
+    const visibles = C.PREGUNTAS.filter((q) => (!q.si || sel.has(q.si)) && !omitidas.has(q.id));
+    let nro = 0;
     const completo = visibles.every((q) => q.opciones.some((o) => sel.has(o.id)));
     $app.innerHTML = `<div class="wrap"><h1>Relevamiento</h1><p class="lead">${esc(state.pdv)} · ${esc(state.marca)} · ${esc(state.tipo.nombre)}</p>
       <div class="thumbs">${state.fotos.map((f, i) => `<div class="foto"><img src="${esc(f.url)}" alt=""><button class="x" data-del="${i}" aria-label="Quitar">×</button></div>`).join('')}</div>
-      ${visibles.map((q) => `<div class="preg"><h2>${q.numero ? q.numero + '. ' : ''}${esc(q.titulo)}</h2>${q.nota ? `<p class="muted">${esc(q.nota)}</p>` : ''}
+      ${visibles.map((q) => `<div class="preg"><h2>${q.numero ? ++nro + '. ' : ''}${esc(q.titulo)}</h2>${q.nota ? `<p class="muted">${esc(q.nota)}</p>` : ''}
         <div class="opts">${q.opciones.map((o) => `<button class="opt radio ${sel.has(o.id) ? 'on' : ''}" data-c="${o.id}"><span class="box"></span>${esc(o.texto)}</button>`).join('')}</div></div>`).join('')}
       <div class="sticky-bar"><div class="row"><button class="btn" id="mas" ${state.fotos.length >= C.MAX_FOTOS ? 'disabled' : ''}>+ Foto</button><button class="btn teal block" id="guardar" ${completo && state.fotos.length >= C.MIN_FOTOS ? '' : 'disabled'}>Guardar relevamiento</button></div>${state.fotos.length < C.MIN_FOTOS ? `<p class="muted" style="text-align:center;margin:8px 0 0">Faltan ${C.MIN_FOTOS - state.fotos.length} foto(s) obligatoria(s)</p>` : ''}</div></div>`;
     $app.querySelectorAll('[data-c]').forEach((b) => b.onclick = () => {
@@ -367,7 +379,7 @@
         const just = (state.extras || {})[state.marca + '|' + state.tipo.id];
         if (just) await S.guardarNota({ pdv: state.pdv, marca: state.marca, tipo: 'Adicional: ' + state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, texto: just });
         state.fotos.forEach((f) => URL.revokeObjectURL(f.url));
-        state.fotos = []; state.hechos.add(state.marca + '|' + state.tipo.id); guardarVisita();
+        state.fotos = []; state.hechos.add(state.marca + '|' + state.tipo.id); guardarVisita(); marcarVisitado(state.pdv);
         toast(!S.remoto ? `${n} foto(s) guardadas en este dispositivo (modo prueba)` : navigator.onLine ? 'Relevamiento guardado. Se está subiendo en segundo plano.' : `Guardado en el teléfono: ${n} foto(s) se subirán cuando haya señal`);
         pintarSync(); state.guardando = false; ir('tipos');
       } catch (err) { state.guardando = false; toast('No se pudo guardar: ' + err.message); e.target.disabled = false; e.target.textContent = 'Guardar relevamiento'; }
@@ -606,7 +618,7 @@
             ${lista.length ? lista.map((x) => `<div class="vis"><div class="vis-h"><div><b>${esc(x.pdv)} · ${esc(x.marca || '')}</b><small>${fmtFecha(x.ts)}</small></div><span class="chip org">${esc(String(x.tipo || '').replace(pref, ''))}</span></div><div class="an-l" style="margin-top:8px">Justificación</div><div class="an-box" style="min-height:0">${esc(x.texto)}</div></div>`).join('') : `<div class="empty">${vacio}</div>`}</section>`;
     const notasAdic = notas.filter((x) => /^Adicional:/.test(x.tipo || ''));
     const secNotas = panelNotas(notas.filter((x) => !/^Adicional:/.test(x.tipo || '')), 'Espacios no encontrados', 'Puntos de venta visitados donde no se encontró el espacio, con la justificación del motivo.', 'No hay espacios no encontrados en este período', /^Sin relevar: /)
-      + (notasAdic.length ? panelNotas(notasAdic, 'Espacios fuera de la lista', 'Espacios relevados que no figuraban en la lista del punto de venta, con su justificación.', '', /^Adicional: /) : '');
+      + (notasAdic.length ? panelNotas(notasAdic, 'Espacios fuera de la lista · ' + notasAdic.length, 'Espacios encontrados y relevados que no estaban contemplados en los acuerdos del punto de venta, con su motivo.', '', /^Adicional: /) : '');
 
     // ── Resumen: indicadores y estado por punto de venta (con filtro) ──
     const secResumen = `<section><h1>Resumen</h1><p class="sub">Avance del relevamiento y resultados del período.</p>
@@ -615,7 +627,7 @@
               ${kpi('ok', 'pin', 'Puntos de venta relevados', `${relevados} <small>de ${pdvsVista.length}</small>`, `<div class="k-bar"><b class="ok" style="width:${pctRuta || 0}%"></b></div>`, 'det')}
               ${kpi('az', 'foto', 'Espacios relevados', n, '', 'esp')}
               ${kpi('warn', 'cumple', 'Respuestas favorables', pctResp === null ? '–' : pctResp + '%', `<div class="k-bar"><b class="ok" style="width:${pctResp || 0}%"></b></div>`, 'eval')}
-            </div><div class="k-nota">Avance: ${pctRuta === null ? '–' : pctRuta + '%'} de los puntos de venta ya relevados. Respuestas favorables: porcentaje sobre el total de respuestas dadas.</div></section>
+            </div><div class="k-nota">Avance: ${pctRuta === null ? '–' : pctRuta + '%'} de los puntos de venta ya relevados. Respuestas favorables: porcentaje sobre el total de respuestas dadas.${notasAdic.length ? ` Espacios encontrados fuera de lo contemplado en los acuerdos: ${notasAdic.length}.` : ''}</div></section>
           <section class="panel" id="s-mar"><div class="p-head"><i class="k-ico warn">${svg('foto', 18)}</i><div><h2>Marcas con más relevamientos</h2><p>Cantidad de góndolas relevadas por marca en el período.</p></div></div>
             ${marcasR.length ? marcasR.map((z) => `<div class="mr-row"><span>${esc(z.m)}</span><div class="mr-t"><i style="width:${(z.n / marcasR[0].n) * 100}%"></i></div><b>${z.n}</b></div>`).join('') : '<div class="empty">Sin relevamientos</div>'}</section>
           <section class="panel" id="s-cad"><div class="p-head"><i class="k-ico az">${svg('grid', 18)}</i><div><h2>Estado por cadena</h2><p>Toca una cadena para ver sus puntos de venta.</p></div></div>

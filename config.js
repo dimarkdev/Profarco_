@@ -71,8 +71,8 @@ window.CONFIG = {
       { id: 'ocupa_profarco', texto: 'Otra marca de Profarco', tono: 'warn' },
       { id: 'ocupa_otra', texto: 'Otra marca (no Profarco)', tono: 'bad' },
       { id: 'ocupa_propia', texto: 'Marca propia o producto del supermercado', tono: 'bad' },
-      { id: 'ocupa_material', texto: 'Material sin producto', tono: 'warn' },
-      { id: 'ocupa_vacio', texto: 'Vacío', tono: 'bad' } ] },
+      { id: 'ocupa_material', texto: 'Material sin producto', tono: 'warn', omite: ['abast', 'visib'] },   // sin producto no hay abastecimiento ni visibilidad que valorar
+      { id: 'ocupa_vacio', texto: 'Vacío', tono: 'bad', omite: ['abast', 'visib'] } ] },
     { id: 'abast', corto: 'Abastecimiento', numero: 2, titulo: 'Nivel de abastecimiento del espacio', opciones: [
       { id: 'abast_completo', texto: 'Completo (mayoría de productos).', tono: 'ok' },
       { id: 'abast_bajo', texto: 'Bajo (poca cantidad de productos).', tono: 'bad' },

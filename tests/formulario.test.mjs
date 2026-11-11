@@ -296,9 +296,22 @@ test('"Que ocupa el espacio" aparece solo si la marca no esta; Guardar exige tod
     await t.page.click('[data-c="presente_si"]'); assert.equal(await t.page.$('[data-c="ocupa_vacio"]'), null);
     await t.page.click('[data-c="presente_no"]'); await t.page.waitForSelector('[data-c="ocupa_vacio"]');
     assert.equal((await t.page.$$('[data-c^="ocupa_"]')).length, 5);
-    await responder(t.page, ['ocupa_vacio', 'abast_sin', 'visib_obstruido', 'estado_roto']); assert.ok(!(await t.page.isDisabled('#guardar')));
+    await responder(t.page, ['ocupa_otra', 'abast_sin', 'visib_obstruido', 'estado_roto']); assert.ok(!(await t.page.isDisabled('#guardar')));
     await t.page.click('[data-c="presente_si"]'); assert.equal(await t.page.$('[data-c="ocupa_vacio"]'), null);   // al volver a Si se descarta
     await responder(t.page, ['abast_completo', 'visib_total', 'estado_bueno']); assert.ok(!(await t.page.isDisabled('#guardar')));
+  } finally { await t.cerrar(); }
+});
+test('Material sin producto o vacio: no se preguntan abastecimiento ni visibilidad', async () => {
+  const t = await nuevo(); try {
+    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls', 'exhibidor'); await pasarReferencia(t.page); await disparar(t.page, 2); await t.page.click('[data-listo]');
+    await t.page.click('[data-c="presente_no"]'); await t.page.click('[data-c="abast_bajo"]');
+    await t.page.click('[data-c="ocupa_material"]');
+    assert.equal(await t.page.$('[data-c^="abast_"]'), null); assert.equal(await t.page.$('[data-c^="visib_"]'), null);
+    assert.ok(await t.page.isDisabled('#guardar'), 'falta el estado del mueble');
+    await t.page.click('[data-c="estado_bueno"]'); assert.ok(!(await t.page.isDisabled('#guardar')));
+    assert.match(await texto(t.page, '.wrap'), /2\. Estado del mueble/, 'numeracion sin huecos');
+    await t.page.click('#guardar'); await esperar(() => posts(t.srv, 'foto').length === 2, 6000, 'fotos');
+    const c = posts(t.srv, 'foto')[0].criterios; assert.ok(c.includes('ocupa_material') && c.includes('no_cumple') && !c.some((x) => /^(abast|visib)_/.test(x)));
   } finally { await t.cerrar(); }
 });
 test('Una sola opcion por pregunta', async () => {

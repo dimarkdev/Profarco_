@@ -552,11 +552,28 @@ button.k-link:focus-visible { outline: 2px solid #3cb3a8; outline-offset: 2px; }
 .g-item { position: relative; }
 .g-item .n-fotos { position: absolute; top: 8px; right: 8px; z-index: 1; background: rgba(0, 0, 0, .6); color: #fff; font-size: 11.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
 
-/* Espacios que corresponden al punto de venta y la marca: en verde (relevados, con etiqueta). Los demas se ven normales y se pueden relevar igual. */
-.tile.esp, .tile:has(.hecho) { background: #dff5e6 !important; border: 2px solid #22a447 !important; box-shadow: 0 3px 12px rgba(34, 164, 71, .25); }
-.tile.esp b, .tile:has(.hecho) b { color: #0f5c26; font-weight: 700; }
-.tile.esp img, .tile:has(.hecho) img { background: #b9e8c7; }
-.tile.esp::after, .tile:has(.hecho)::after { color: #22a447; }
-.tile:has(.hecho) { background: #c4ecd2 !important; }
+/* Espacios contemplados en el acuerdo (punto verde + tarjeta verde). Los relevados que no estaban contemplados quedan blancos con etiqueta "Adicional". */
+.tile.esp { background: #dff5e6 !important; border: 2px solid #22a447 !important; box-shadow: 0 3px 12px rgba(34, 164, 71, .25); }
+.tile.esp b { color: #0f5c26; font-weight: 700; }
+.tile.esp img { background: #b9e8c7; }
+.tile.esp::after { color: #22a447; }
+.tile.esp:has(.hecho) { background: #c4ecd2 !important; }
+.tile.esp b::before { content: ''; display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 50%; background: #22a447; vertical-align: middle; }
 .tile .hecho { width: auto; height: auto; padding: 4px 11px; gap: 4px; font-size: 12px; font-weight: 700; letter-spacing: .2px; border-radius: 999px; background: #22a447; color: #fff; display: inline-flex; align-items: center; }
 .tile .hecho::before { content: none; }
+.tile .adic { order: 3; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: #fdebd0; color: #9a5b00; border: 1px solid #f0c78a; }
+.marca-b.asignada { border: 2px solid #22a447; background: #dff5e6; }
+.marca-b.asignada::before { content: ''; position: absolute; left: 10px; top: 50%; width: 10px; height: 10px; margin-top: -5px; border-radius: 50%; background: #22a447; }
+.marca-b.hecha { background: #c4ecd2; }
+.leyenda { display: flex; align-items: center; gap: 8px; margin: 14px 2px 0; font-size: 12.5px; color: var(--text-2); }
+.leyenda .pto { flex: none; width: 10px; height: 10px; border-radius: 50%; background: #22a447; }
+.marca-b.hecha:not(.asignada) { background: var(--surface); border-color: var(--border); }
+
+/* Puntos de venta ya visitados */
+.pdv-item { position: relative; }
+.pdv-item.visitado { border: 2px solid #22a447; background: #eaf8ee; padding-right: 52px; }
+.pdv-item .chk { position: absolute; right: 14px; top: 50%; width: 26px; height: 26px; margin-top: -13px; display: grid; place-items: center; border-radius: 50%; background: #22a447; color: #fff; font-style: normal; font-size: 15px; font-weight: 800; }
+.pdv-item .cuando { display: block; margin-top: 2px; font-style: normal; font-size: 12px; font-weight: 600; color: #1d7f3e; }
+.wrap .leyenda { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: flex-start; }
+.leyenda span { flex: 1; min-width: 0; line-height: 1.35; }
+.leyenda .pto { margin-top: 4px; }
