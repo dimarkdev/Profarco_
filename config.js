@@ -14,7 +14,8 @@ window.CONFIG = {
   FOTO_MAX_PX: 1600,
   FOTO_CALIDAD: 0.8,
   // Maximo de fotos por relevamiento (un espacio de una marca).
-  MAX_FOTOS: 2,
+  MIN_FOTOS: 2,   // obligatorias
+  MAX_FOTOS: 5,   // 2 obligatorias + 3 adicionales
 
   // Marcas que se relevan (el relevador elige una despues del punto de venta).
   MARCAS: ['Bauducco', 'Bettanin', 'Fini', 'Kellogg’s', 'M&M’s', 'Nosotras', 'Pedigree', 'Panasonic', 'Broterra',

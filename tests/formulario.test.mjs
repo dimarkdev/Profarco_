@@ -232,17 +232,30 @@ test('Sin planograma muestra el aviso y deja continuar', async () => {
 });
 
 grupo('Camara');
-test('Contador de fotos visible y actualizado en cada toma; maximo 2', async () => {
+test('Contador de fotos: 2 obligatorias y hasta 3 adicionales (maximo 5)', async () => {
   const t = await nuevo(); try {
     await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls', 'exhibidor'); await pasarReferencia(t.page);
-    assert.equal(await texto(t.page, '[data-count]'), 'Fotos 0/2');
-    await t.page.click('[data-disp]'); await esperar(async () => (await texto(t.page, '[data-count]')) === 'Fotos 1/2', 4000, '1/2');
-    assert.match(await texto(t.page, '.toast'), /Foto 1\/2 tomada/);
-    assert.match(await texto(t.page, '[data-listo]'), /Listo · 1\/2/);
-    await dormir(200); await t.page.click('[data-disp]'); await esperar(async () => (await texto(t.page, '[data-count]')) === 'Fotos 2/2', 4000, '2/2');
+    assert.match(await texto(t.page, '[data-count]'), /^Fotos 0\/5/);
+    await t.page.click('[data-disp]'); await esperar(async () => /^Fotos 1\/5/.test(await texto(t.page, '[data-count]')), 4000, '1/5');
+    assert.match(await texto(t.page, '[data-count]'), /faltan 1 obligatoria/);
+    assert.ok(await t.page.isDisabled('[data-listo]'), 'con 1 foto no se puede terminar');
+    await dormir(200); await t.page.click('[data-disp]'); await esperar(async () => /^Fotos 2\/5/.test(await texto(t.page, '[data-count]')), 4000, '2/5');
+    assert.ok(!(await t.page.isDisabled('[data-listo]')), 'con 2 fotos ya se puede terminar');
+    assert.match(await texto(t.page, '[data-count]'), /3 adicionales/);
+    for (let i = 3; i <= 5; i++) { await dormir(200); await t.page.click('[data-disp]'); await esperar(async () => new RegExp('^Fotos ' + i + '/5').test(await texto(t.page, '[data-count]')), 4000, i + '/5'); }
     await dormir(200); await t.page.click('[data-disp]');
-    await esperar(async () => /Máximo 2 fotos/.test(await texto(t.page, '.toast')), 3000, 'aviso de maximo');
-    assert.equal(await texto(t.page, '[data-count]'), 'Fotos 2/2');
+    await esperar(async () => /Máximo 5 fotos/.test(await texto(t.page, '.toast')), 3000, 'aviso de maximo');
+    assert.match(await texto(t.page, '[data-count]'), /^Fotos 5\/5/);
+  } finally { await t.cerrar(); }
+});
+test('Con menos de 2 fotos no se puede guardar; con 2 si', async () => {
+  const t = await nuevo(); try {
+    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls', 'exhibidor'); await pasarReferencia(t.page); await disparar(t.page, 2); await t.page.click('[data-listo]');
+    await responder(t.page, OK_TODO); assert.ok(!(await t.page.isDisabled('#guardar')));
+    await t.page.click('[data-del="0"]'); assert.ok(await t.page.isDisabled('#guardar'));
+    assert.match(await texto(t.page, '.wrap'), /Faltan 1 foto/);
+    await t.page.click('#mas'); await t.page.waitForSelector('.cam'); await disparar(t.page, 1); await t.page.click('[data-listo]');
+    await t.page.waitForSelector('#guardar'); assert.ok(!(await t.page.isDisabled('#guardar')));
   } finally { await t.cerrar(); }
 });
 test('Zoom: control visible, botones y deslizador cambian el valor', async () => {
@@ -254,7 +267,7 @@ test('Zoom: control visible, botones y deslizador cambian el valor', async () =>
     await t.page.click('[data-zm]'); assert.equal(await texto(t.page, '[data-zv]'), v0);
     await t.page.$eval('[data-zr]', (r) => { r.value = 3; r.dispatchEvent(new Event('input')); });
     assert.match(await texto(t.page, '[data-zv]'), /^3/);
-    await disparar(t.page, 1); assert.equal(await texto(t.page, '[data-count]'), 'Fotos 1/2');   // se puede fotografiar con zoom
+    await disparar(t.page, 1); assert.match(await texto(t.page, '[data-count]'), /^Fotos 1\/5/);   // se puede fotografiar con zoom
   } finally { await t.cerrar(); }
 });
 test('Doble toque en "Entendido, abrir camara" abre una sola camara', async () => {
@@ -277,7 +290,7 @@ test('Cerrar la camara con fotos pide confirmacion y descarta', async () => {
 grupo('Preguntas y resultado');
 test('"Que ocupa el espacio" aparece solo si la marca no esta; Guardar exige todo respondido', async () => {
   const t = await nuevo(); try {
-    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls', 'exhibidor'); await pasarReferencia(t.page); await disparar(t.page, 1); await t.page.click('[data-listo]');
+    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls', 'exhibidor'); await pasarReferencia(t.page); await disparar(t.page, 2); await t.page.click('[data-listo]');
     assert.ok(await t.page.isDisabled('#guardar'));
     await t.page.click('[data-c="presente_si"]'); assert.equal(await t.page.$('[data-c="ocupa_vacio"]'), null);
     await t.page.click('[data-c="presente_no"]'); await t.page.waitForSelector('[data-c="ocupa_vacio"]');
@@ -289,13 +302,13 @@ test('"Que ocupa el espacio" aparece solo si la marca no esta; Guardar exige tod
 });
 test('Una sola opcion por pregunta', async () => {
   const t = await nuevo(); try {
-    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls', 'exhibidor'); await pasarReferencia(t.page); await disparar(t.page, 1); await t.page.click('[data-listo]');
+    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls', 'exhibidor'); await pasarReferencia(t.page); await disparar(t.page, 2); await t.page.click('[data-listo]');
     await t.page.click('[data-c="abast_completo"]'); await t.page.click('[data-c="abast_bajo"]');
     assert.equal((await t.page.$$('[data-c^="abast_"].on')).length, 1);
     assert.ok(await t.page.$('[data-c="abast_bajo"].on'));
   } finally { await t.cerrar(); }
 });
-test('Quitar fotos: con una menos se puede seguir; sin fotos vuelve a los espacios', async () => {
+test('Quitar fotos: hasta quedar sin fotos vuelve a los espacios', async () => {
   const t = await nuevo(); try {
     await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls', 'exhibidor'); await pasarReferencia(t.page); await disparar(t.page, 2); await t.page.click('[data-listo]');
     assert.equal((await t.page.$$('.thumbs .foto')).length, 2);
@@ -323,15 +336,15 @@ test('Guarda 2 fotos con sus respuestas y marca el espacio como relevado', async
 test('Resultado "No cumple" cuando alguna respuesta no es favorable', async () => {
   const t = await nuevo(); try {
     await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls');
-    await relevar(t.page, { tipoId: 'exhibidor', ids: ['presente_no', 'ocupa_propia', 'abast_bajo', 'visib_parcial', 'estado_sucio'], fotos: 1 }); await t.page.click('#guardar');
-    await esperar(() => posts(t.srv, 'foto').length === 1, 6000, 'foto subida');
+    await relevar(t.page, { tipoId: 'exhibidor', ids: ['presente_no', 'ocupa_propia', 'abast_bajo', 'visib_parcial', 'estado_sucio'], fotos: 2 }); await t.page.click('#guardar');
+    await esperar(() => posts(t.srv, 'foto').length === 2, 6000, 'foto subida');
     const c = posts(t.srv, 'foto')[0].criterios; assert.ok(c.includes('no_cumple') && !c.includes('cumple'));
   } finally { await t.cerrar(); }
 });
 test('La foto de la camara sale ya reducida (no mas de 1600 px)', async () => {
   const t = await nuevo(); try {
-    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls'); await relevar(t.page, { tipoId: 'exhibidor', fotos: 1 }); await t.page.click('#guardar');
-    await esperar(() => posts(t.srv, 'foto').length === 1, 6000, 'foto subida');
+    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls'); await relevar(t.page, { tipoId: 'exhibidor', fotos: 2 }); await t.page.click('#guardar');
+    await esperar(() => posts(t.srv, 'foto').length === 2, 6000, 'foto subida');
     const dim = await t.page.evaluate(async (b64) => { const im = new Image(); im.src = 'data:image/jpeg;base64,' + b64; await im.decode(); return [im.width, im.height]; }, posts(t.srv, 'foto')[0].data);
     assert.ok(Math.max(...dim) <= 1600, 'dimensiones ' + dim);
   } finally { await t.cerrar(); }
@@ -356,10 +369,10 @@ test('DOBLE ENVIO: tocar "Guardar" muchas veces seguidas sube cada foto una sola
 });
 test('REINTENTO: si el servidor falla una vez, el reintento usa la misma clave (no duplica)', async () => {
   const t = await nuevo({ srv: { falla1: true } }); try {
-    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls'); await relevar(t.page, { tipoId: 'exhibidor', fotos: 1 }); await t.page.click('#guardar');
-    await esperar(() => posts(t.srv, 'foto').length === 2, 8000, 'intento + reintento');
-    const [a, b] = posts(t.srv, 'foto'); assert.equal(a.cid, b.cid);
-    await dormir(800); assert.equal(posts(t.srv, 'foto').length, 2, 'no se reenvia otra vez');
+    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls'); await relevar(t.page, { tipoId: 'exhibidor', fotos: 2 }); await t.page.click('#guardar');
+    await esperar(() => posts(t.srv, 'foto').length === 3, 8000, 'intento + reintento + segunda foto');
+    const [a, b, c] = posts(t.srv, 'foto'); assert.equal(a.cid, b.cid); assert.notEqual(a.cid, c.cid);
+    await dormir(800); assert.equal(posts(t.srv, 'foto').length, 3, 'no se reenvia otra vez');
   } finally { await t.cerrar(); }
 });
 test('SIN SENAL: guarda en el telefono y sube solo al volver la conexion, sin duplicar', async () => {
@@ -376,11 +389,59 @@ test('SIN SENAL: guarda en el telefono y sube solo al volver la conexion, sin du
   } finally { await t.cerrar(); }
 });
 
+grupo('Retroceder y retomar');
+test('Atras del telefono en preguntas: pide confirmar y vuelve a los espacios', async () => {
+  const t = await nuevo(); try {
+    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls', 'exhibidor'); await pasarReferencia(t.page); await disparar(t.page, 2); await t.page.click('[data-listo]');
+    await t.page.waitForSelector('#guardar'); await t.page.goBack(); await t.page.waitForSelector('.tile');
+    assert.equal(await t.page.$('.tile .hecho'), null); assert.equal(posts(t.srv, 'foto').length, 0);
+  } finally { await t.cerrar(); }
+});
+test('Atras del telefono: espacios -> marcas -> puntos de venta, sin salir de la app', async () => {
+  const t = await nuevo(); try {
+    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls');
+    await t.page.goBack(); await t.page.waitForSelector('.marca-b'); // desde espacios (sin tipo) vuelve a marcas
+    await t.page.goBack(); await t.page.waitForSelector('.pdv-item');
+    assert.match(t.page.url(), /127\.0\.0\.1/);
+  } finally { await t.cerrar(); }
+});
+test('Atras del telefono con la camara abierta: cierra la camara', async () => {
+  const t = await nuevo(); try {
+    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls', 'exhibidor'); await pasarReferencia(t.page);
+    await t.page.goBack(); await t.page.waitForSelector('.tile'); assert.equal(await t.page.$('.cam'), null);
+  } finally { await t.cerrar(); }
+});
+test('Recargar la pagina retoma la visita: sigue el punto de venta y lo ya relevado', async () => {
+  const t = await nuevo(); try {
+    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls');
+    await relevar(t.page, { tipoId: 'exhibidor' }); await t.page.click('#guardar'); await t.page.waitForSelector('.tile .hecho');
+    await t.page.reload(); await t.page.waitForSelector('.marca-b');
+    await t.page.click('.marca-b[data-m="Halls"]'); await t.page.waitForSelector('.tile .hecho');
+    assert.ok(await t.page.$('#fin'), 'sigue el boton Finalizar visita');
+  } finally { await t.cerrar(); }
+});
+test('Volver a elegir el mismo punto de venta no borra lo relevado', async () => {
+  const t = await nuevo(); try {
+    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls');
+    await relevar(t.page, { tipoId: 'exhibidor' }); await t.page.click('#guardar'); await t.page.waitForSelector('.tile .hecho');
+    await t.page.click('#atras'); await t.page.click('#atras'); await t.page.waitForSelector('.pdv-item');
+    await irA(t.page, 'PDV Uno', 'Halls'); await t.page.waitForSelector('.tile .hecho');
+  } finally { await t.cerrar(); }
+});
+test('Finalizar la visita limpia el progreso guardado', async () => {
+  const t = await nuevo(); try {
+    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls');
+    await relevar(t.page, { tipoId: 'exhibidor' }); await t.page.click('#guardar'); await t.page.waitForSelector('.tile .hecho');
+    await t.page.click('#fin'); await t.page.waitForSelector('.pdv-item');
+    assert.equal(await t.page.evaluate(() => localStorage.getItem('visita')), null);
+  } finally { await t.cerrar(); }
+});
+
 grupo('Finalizar visita y justificaciones');
 test('Finalizar con espacios esperados sin relevar pide justificacion y la envia', async () => {
   const t = await nuevo(); try {
     await entrar(t.page); await irA(t.page, 'PDV Uno', 'Bauducco');
-    await relevar(t.page, { tipoId: 'exhibidor', fotos: 1 }); await t.page.click('#guardar'); await t.page.waitForSelector('.tile .hecho');
+    await relevar(t.page, { tipoId: 'exhibidor', fotos: 2 }); await t.page.click('#guardar'); await t.page.waitForSelector('.tile .hecho');
     await t.page.click('#fin'); await t.page.waitForSelector('.modal');
     assert.match(await texto(t.page, '.modal h2'), /no se encontró el espacio/);
     assert.match(await texto(t.page, '.modal .sub'), /Bauducco.*Puntera/);
@@ -394,7 +455,7 @@ test('Finalizar con espacios esperados sin relevar pide justificacion y la envia
 });
 test('Finalizar con todo lo esperado relevado no pide justificacion', async () => {
   const t = await nuevo(); try {
-    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls'); await relevar(t.page, { tipoId: 'exhibidor', fotos: 1 }); await t.page.click('#guardar'); await t.page.waitForSelector('.tile .hecho');
+    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls'); await relevar(t.page, { tipoId: 'exhibidor', fotos: 2 }); await t.page.click('#guardar'); await t.page.waitForSelector('.tile .hecho');
     await t.page.click('#fin'); await t.page.waitForSelector('.pdv-item'); assert.equal(await t.page.$('.modal'), null);
     assert.equal(posts(t.srv, 'nota').length, 0);
   } finally { await t.cerrar(); }
@@ -403,8 +464,8 @@ test('Espacio fuera de la lista: se relevan las fotos y se envia la justificacio
   const t = await nuevo(); try {
     await entrar(t.page); await irA(t.page, 'PDV Uno', 'Bauducco', 'isla');
     await t.page.fill('#xtxt', 'Hay una isla que no figuraba'); await t.page.click('[data-ok]');
-    await pasarReferencia(t.page); await disparar(t.page, 1); await t.page.click('[data-listo]'); await responder(t.page, OK_TODO); await t.page.click('#guardar');
-    await esperar(() => posts(t.srv, 'foto').length === 1 && posts(t.srv, 'nota').length === 1, 8000, 'foto y nota');
+    await pasarReferencia(t.page); await disparar(t.page, 2); await t.page.click('[data-listo]'); await responder(t.page, OK_TODO); await t.page.click('#guardar');
+    await esperar(() => posts(t.srv, 'foto').length === 2 && posts(t.srv, 'nota').length === 1, 8000, 'foto y nota');
     const n = posts(t.srv, 'nota')[0]; assert.equal(n.tipo, 'Adicional: Isla'); assert.equal(n.texto, 'Hay una isla que no figuraba');
     assert.equal(posts(t.srv, 'foto')[0].tipo, 'Isla');
   } finally { await t.cerrar(); }

@@ -539,7 +539,7 @@ button.k-link:hover { border-color: #3cb3a8; box-shadow: 0 6px 16px rgba(19, 102
 button.k-link:focus-visible { outline: 2px solid #3cb3a8; outline-offset: 2px; }
 
 /* Espacios que no figuran en la lista del punto de venta */
-.tile.fuera { opacity: .38; filter: grayscale(.85); }
+.tile.fuera { opacity: .6; filter: grayscale(.6); }
 .tile.fuera::after { content: 'Fuera de la lista'; position: absolute; left: 10px; bottom: 10px; background: rgba(0, 0, 0, .55); color: #fff; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
 
 /* Camara: contador de fotos y zoom */
@@ -553,3 +553,12 @@ button.k-link:focus-visible { outline: 2px solid #3cb3a8; outline-offset: 2px; }
 /* Evidencias: un relevamiento = una tarjeta con sus fotos */
 .g-item { position: relative; }
 .g-item .n-fotos { position: absolute; top: 8px; right: 8px; z-index: 1; background: rgba(0, 0, 0, .6); color: #fff; font-size: 11.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
+
+/* Espacios que corresponden al punto de venta y la marca: en verde (relevados, con etiqueta). Los demas siguen disponibles. */
+.tile.esp, .tile:has(.hecho) { background: #dff5e6 !important; border: 2px solid #22a447 !important; box-shadow: 0 3px 12px rgba(34, 164, 71, .25); }
+.tile.esp b, .tile:has(.hecho) b { color: #0f5c26; font-weight: 700; }
+.tile.esp img, .tile:has(.hecho) img { background: #b9e8c7; }
+.tile.esp::after, .tile:has(.hecho)::after { color: #22a447; }
+.tile:has(.hecho) { background: #c4ecd2 !important; }
+.tile .hecho { width: auto; height: auto; padding: 4px 11px; gap: 4px; font-size: 12px; font-weight: 700; letter-spacing: .2px; border-radius: 999px; background: #22a447; color: #fff; display: inline-flex; align-items: center; }
+.tile .hecho::before { content: none; }

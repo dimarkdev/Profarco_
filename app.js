@@ -44,6 +44,15 @@
     document.body.appendChild(el);
   }
 
+  // Progreso de la visita (punto de venta, espacios ya relevados y justificaciones): se guarda en el telefono para retomarlo del mismo dia.
+  const hoy = () => new Date().toLocaleDateString('sv');
+  const guardarVisita = () => { try { if (!state.pdv || !state.usuario) localStorage.removeItem('visita'); else localStorage.setItem('visita', JSON.stringify({ ci: state.usuario.ci, pdv: state.pdv, dia: hoy(), hechos: [...state.hechos], extras: state.extras || {} })); } catch (e) { /* sin almacenamiento: sigue en memoria */ } };
+  const retomarVisita = (pdv) => {
+    const v = guardado('visita');
+    if (!v || !state.usuario || v.ci !== state.usuario.ci || v.dia !== hoy() || (pdv && v.pdv !== pdv)) return false;
+    state.pdv = v.pdv; state.hechos = new Set(v.hechos || []); state.extras = v.extras || {}; return true;
+  };
+
   // ── Estado ──
   const state = {
     planos: [], pdvs: [],
@@ -133,7 +142,7 @@
       <p style="text-align:center;margin-top:24px"><button class="link" id="otro">No soy ${esc(state.usuario.nombre)}</button></p></div>`;
     const q$ = document.getElementById('q');
     q$.oninput = () => { state.filtroPdv = q$.value; const p = q$.selectionStart; pasoPdv(); const n = document.getElementById('q'); n.focus(); n.setSelectionRange(p, p); };
-    $app.querySelectorAll('[data-n]').forEach((b) => b.onclick = () => { state.pdv = b.dataset.n; state.hechos = new Set(); state.extras = {}; state.marca = ''; ir('marca'); });
+    $app.querySelectorAll('[data-n]').forEach((b) => b.onclick = () => { state.pdv = b.dataset.n; if (!retomarVisita(state.pdv)) { state.hechos = new Set(); state.extras = {}; } state.marca = ''; guardarVisita(); ir('marca'); });
     document.getElementById('otro').onclick = () => { localStorage.removeItem('usuario'); state.usuario = null; ir('ci'); };
   }
 
@@ -141,7 +150,7 @@
   function finalizarVisita() {
     const faltan = C.MARCAS.map((m) => ({ marca: m, tocada: [...state.hechos].some((h) => h.startsWith(m + '|')), tipos: tiposEsperados(state.pdv, m).filter((t) => !state.hechos.has(m + '|' + t.id)) }))
       .filter((x) => x.tocada && x.tipos.length);
-    const cerrar = () => { state.hechos = new Set(); state.extras = {}; state.marca = ''; ir('pdv'); };
+    const cerrar = () => { state.hechos = new Set(); state.extras = {}; state.marca = ''; try { localStorage.removeItem('visita'); } catch (e) { /* igual */ } ir('pdv'); };
     if (!faltan.length) return cerrar();
     let texto = '';
     const m = document.createElement('div'); m.className = 'modal';
@@ -184,7 +193,7 @@
     $app.innerHTML = `<div class="wrap"><h1>Tipo de espacio</h1><p class="lead">Selecciona el espacio a auditar</p>
       <div class="row" style="margin-top:22px"><button class="back" id="atras" aria-label="Volver">${ICON_BACK}</button><div class="sede">${esc(state.pdv)}</div></div>
       <div class="sede-sub"><span>${esc(state.marca)}</span></div>
-      <div class="tiles">${primeroLosDelPunto(tiposDeMarca(state.marca), (t) => esperado(state.pdv, state.marca, t)).map((t) => `<button class="tile ${t.img ? '' : 'sin-img'} ${esperado(state.pdv, state.marca, t) ? '' : 'fuera'}" data-t="${t.id}" style="background:${t.color}">${state.hechos.has(state.marca + '|' + t.id) ? '<span class="hecho">✓ Relevado</span>' : ''}${t.img ? `<img src="${t.img}" alt="">` : `<span class="tile-ico">${ico}</span>`}<b>${esc(t.nombre)}</b></button>`).join('')}</div>
+      <div class="tiles">${primeroLosDelPunto(tiposDeMarca(state.marca), (t) => esperado(state.pdv, state.marca, t)).map((t) => `<button class="tile ${t.img ? '' : 'sin-img'} ${esperado(state.pdv, state.marca, t) ? (esperadosDe(state.pdv) ? 'esp' : '') : 'fuera'}" data-t="${t.id}" style="background:${t.color}">${state.hechos.has(state.marca + '|' + t.id) ? '<span class="hecho">✓ Relevado</span>' : ''}${t.img ? `<img src="${t.img}" alt="">` : `<span class="tile-ico">${ico}</span>`}<b>${esc(t.nombre)}</b></button>`).join('')}</div>
       ${state.hechos.size ? '<button class="btn primary block" id="fin" style="margin-top:22px">Finalizar visita</button>' : ''}</div>`;
     document.getElementById('atras').onclick = () => ir('marca');
     precargarPlanos();
@@ -208,7 +217,7 @@
     const ok = m.querySelector('[data-ok]');
     m.querySelector('#xtxt').oninput = (e) => { texto = e.target.value; ok.disabled = texto.trim().length < 5; };
     m.querySelector('[data-x]').onclick = m.querySelector('[data-no]').onclick = () => m.remove();
-    ok.onclick = () => { state.extras = state.extras || {}; state.extras[state.marca + '|' + t.id] = texto.trim(); state.tipo = t; m.remove(); abrirReferencia(); };
+    ok.onclick = () => { state.extras = state.extras || {}; state.extras[state.marca + '|' + t.id] = texto.trim(); guardarVisita(); state.tipo = t; m.remove(); abrirReferencia(); };
     document.body.appendChild(m);
   }
 
@@ -269,7 +278,7 @@
     let stream = null;
     const parar = () => stream?.getTracks().forEach((t) => t.stop());
     const salir = () => { parar(); el.remove(); };
-    const actualizar = () => { q('[data-count]').textContent = `Fotos ${state.fotos.length}/${C.MAX_FOTOS}`; const b = q('[data-listo]'); b.classList.toggle('hide', !state.fotos.length); b.textContent = `Listo · ${state.fotos.length}/${C.MAX_FOTOS}`; q('[data-disp]').classList.toggle('lleno', state.fotos.length >= C.MAX_FOTOS); };
+    const actualizar = () => { const n = state.fotos.length, falta = C.MIN_FOTOS - n; q('[data-count]').textContent = `Fotos ${n}/${C.MAX_FOTOS} · ${falta > 0 ? `faltan ${falta} obligatoria${falta > 1 ? 's' : ''}` : n < C.MAX_FOTOS ? `${C.MAX_FOTOS - n} adicional${C.MAX_FOTOS - n > 1 ? 'es' : ''} opcional${C.MAX_FOTOS - n > 1 ? 'es' : ''}` : 'completo'}`; const b = q('[data-listo]'); b.classList.toggle('hide', !n); b.disabled = falta > 0; b.textContent = falta > 0 ? `Faltan ${falta}` : `Listo · ${n}/${C.MAX_FOTOS}`; q('[data-disp]').classList.toggle('lleno', state.fotos.length >= C.MAX_FOTOS); };
     const agregar = (blob) => { if (state.fotos.length >= C.MAX_FOTOS) { toast(`Máximo ${C.MAX_FOTOS} fotos por relevamiento`); return; } state.fotos.push({ blob, url: URL.createObjectURL(blob) }); actualizar(); toast(`Foto ${state.fotos.length}/${C.MAX_FOTOS} tomada`); const f = q('.flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); };
 
     // Zoom: con el zoom real de la camara si el telefono lo da; si no, zoom digital (recorte al centro).
@@ -325,7 +334,7 @@
       state.fotos.slice(base.length).forEach((f) => URL.revokeObjectURL(f.url));
       state.fotos = base; salir(); ir(sumar ? 'criterios' : 'tipos');
     };
-    q('[data-listo]').onclick = () => { if (!sumar) state.criterios = new Set(); salir(); ir('criterios'); };
+    q('[data-listo]').onclick = () => { if (state.fotos.length < C.MIN_FOTOS) return; if (!sumar) state.criterios = new Set(); salir(); ir('criterios'); };
     actualizar();
   }
 
@@ -339,7 +348,7 @@
       <div class="thumbs">${state.fotos.map((f, i) => `<div class="foto"><img src="${esc(f.url)}" alt=""><button class="x" data-del="${i}" aria-label="Quitar">×</button></div>`).join('')}</div>
       ${visibles.map((q) => `<div class="preg"><h2>${q.numero ? q.numero + '. ' : ''}${esc(q.titulo)}</h2>${q.nota ? `<p class="muted">${esc(q.nota)}</p>` : ''}
         <div class="opts">${q.opciones.map((o) => `<button class="opt radio ${sel.has(o.id) ? 'on' : ''}" data-c="${o.id}"><span class="box"></span>${esc(o.texto)}</button>`).join('')}</div></div>`).join('')}
-      <div class="sticky-bar"><div class="row"><button class="btn" id="mas" ${state.fotos.length >= C.MAX_FOTOS ? 'disabled' : ''}>+ Foto</button><button class="btn teal block" id="guardar" ${completo && state.fotos.length ? '' : 'disabled'}>Guardar relevamiento</button></div></div></div>`;
+      <div class="sticky-bar"><div class="row"><button class="btn" id="mas" ${state.fotos.length >= C.MAX_FOTOS ? 'disabled' : ''}>+ Foto</button><button class="btn teal block" id="guardar" ${completo && state.fotos.length >= C.MIN_FOTOS ? '' : 'disabled'}>Guardar relevamiento</button></div>${state.fotos.length < C.MIN_FOTOS ? `<p class="muted" style="text-align:center;margin:8px 0 0">Faltan ${C.MIN_FOTOS - state.fotos.length} foto(s) obligatoria(s)</p>` : ''}</div></div>`;
     $app.querySelectorAll('[data-c]').forEach((b) => b.onclick = () => {
       const c = criterioDe(b.dataset.c);
       C.CRITERIOS.filter((x) => x.grupo === c.grupo).forEach((x) => sel.delete(x.id));   // una sola opcion por pregunta
@@ -358,7 +367,7 @@
         const just = (state.extras || {})[state.marca + '|' + state.tipo.id];
         if (just) await S.guardarNota({ pdv: state.pdv, marca: state.marca, tipo: 'Adicional: ' + state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, texto: just });
         state.fotos.forEach((f) => URL.revokeObjectURL(f.url));
-        state.fotos = []; state.hechos.add(state.marca + '|' + state.tipo.id);
+        state.fotos = []; state.hechos.add(state.marca + '|' + state.tipo.id); guardarVisita();
         toast(!S.remoto ? `${n} foto(s) guardadas en este dispositivo (modo prueba)` : navigator.onLine ? 'Relevamiento guardado. Se está subiendo en segundo plano.' : `Guardado en el teléfono: ${n} foto(s) se subirán cuando haya señal`);
         pintarSync(); state.guardando = false; ir('tipos');
       } catch (err) { state.guardando = false; toast('No se pudo guardar: ' + err.message); e.target.disabled = false; e.target.textContent = 'Guardar relevamiento'; }
@@ -784,13 +793,30 @@
     };
     if (pagina === 'tablero') conPin(conPdvs(vistaTablero), 'tablero');
     else if (pagina === 'admin') conPin(conPdvs(vistaPlanogramas), 'admin');
-    else { pintarCampo(); refrescarUsuario(); }
+    else { if (state.usuario && retomarVisita()) paso = 'marca'; pintarCampo(); refrescarUsuario(); }
     pintarSync();
   }
 
   document.title = (document.body.dataset.page === 'tablero' ? 'Tablero de góndolas' : document.body.dataset.page === 'admin' ? 'Administración' : 'Relevamiento de góndola') + ` · ${C.CLIENTE}`;
   const $cli = document.getElementById('cliente'); if ($cli) $cli.textContent = C.CLIENTE;
   window.addEventListener('sync', () => { pintarSync(); if (document.body.dataset.page === 'tablero') iniciar(); });
+
+  // Campo: aviso antes de salir con fotos sin guardar y boton "atras" del telefono que retrocede un paso dentro de la app.
+  if (document.body.dataset.page === 'campo') {
+    window.addEventListener('beforeunload', (e) => { if (state.fotos.length || document.querySelector('.cam')) { e.preventDefault(); e.returnValue = ''; } });
+    history.pushState({ campo: 1 }, '');
+    window.addEventListener('popstate', () => {
+      const cam = document.querySelector('.cam'), modal = document.querySelector('.modal');
+      if (cam) cam.querySelector('[data-cerrar]').click();   // pide confirmacion si hay fotos
+      else if (modal) modal.querySelector('[data-x]')?.click();
+      else if (paso === 'criterios') { if (confirm('Se perderá el relevamiento en curso (fotos y respuestas). ¿Salir?')) { state.fotos.forEach((f) => URL.revokeObjectURL(f.url)); state.fotos = []; ir('tipos'); } }
+      else if (paso === 'tipos') ir('marca');
+      else if (paso === 'marca') ir('pdv');
+      else { history.back(); return; }   // en el inicio si se sale de verdad
+      history.pushState({ campo: 1 }, '');
+    });
+  }
+
   iniciar();
   S.sincronizar().then(pintarSync);
 })();
