@@ -667,7 +667,7 @@
     $app.innerHTML = `<div class="dash-app">
       <aside class="side"><div class="side-brand"><img src="img/logo-masmarka.png" alt="+MARKA"><small>Tablero operativo</small></div>
         <div class="side-sec">Principal</div>${nav('resumen', 'grid', 'Resumen')}${nav('eval', 'cmp', 'Evaluación')}${nav('esp', 'grid', 'Espacios')}${nav('ev', 'img', 'Evidencias')}${nav('det', 'pin', 'Detalle de punto de venta')}
-        <div class="side-pie"><div class="side-user"><i>PF</i><div><b>Profarco S.A.</b><small>Vista de cliente</small></div></div><button class="nav-b" id="salir">${svg('out', 19)}<span>Cerrar sesión</span></button></div></aside>
+        <div class="side-pie"><div class="side-user"><i class="pf"><img src="img/icono-profarco.png" alt="Profarco"></i><div><b>Profarco S.A.</b><small>Vista de cliente</small></div></div><button class="nav-b" id="salir">${svg('out', 19)}<span>Cerrar sesión</span></button></div></aside>
       <div class="main">
         <header class="bar"><div class="bar-l"><button class="h-b" id="h-atras" aria-label="Volver" title="Volver" ${hist.n > 0 ? '' : 'disabled'}>←</button><button class="h-b" id="h-adel" aria-label="Avanzar" title="Avanzar" ${hist.n < hist.max ? '' : 'disabled'}>→</button><div class="crumb">Profarco <span>/</span> Principal <span>/</span> <b>${vista === 'eval' ? 'Evaluación' : vista === 'esp' ? 'Espacios' : vista === 'ev' ? 'Evidencias' : vista === 'det' ? 'Detalle de punto de venta' : 'Resumen'}</b></div></div>
           <div class="bar-r"><div class="seg">${per('hoy', 'Hoy')}${per('mes', 'Este mes')}${per('todo', 'Todo')}</div>

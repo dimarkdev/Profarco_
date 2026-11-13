@@ -577,3 +577,7 @@ button.k-link:focus-visible { outline: 2px solid #3cb3a8; outline-offset: 2px; }
 .wrap .leyenda { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: flex-start; }
 .leyenda span { flex: 1; min-width: 0; line-height: 1.35; }
 .leyenda .pto { margin-top: 4px; }
+
+/* Icono de Profarco en el pie del menu del tablero */
+.side-user i.pf { background: #fff; padding: 0; overflow: hidden; }
+.side-user i.pf img { display: block; width: 21px; height: auto; }   /* el logo entero cabe dentro del circulo */
