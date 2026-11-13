@@ -452,19 +452,13 @@ test('Finalizar la visita limpia el progreso guardado', async () => {
 });
 
 grupo('Finalizar visita y justificaciones');
-test('Finalizar con espacios esperados sin relevar pide justificacion y la envia', async () => {
+test('Finalizar con espacios contemplados sin relevar NO pide motivo y no envia notas', async () => {
   const t = await nuevo(); try {
     await entrar(t.page); await irA(t.page, 'PDV Uno', 'Bauducco');
     await relevar(t.page, { tipoId: 'exhibidor', fotos: 2 }); await t.page.click('#guardar'); await t.page.waitForSelector('.tile .hecho');
-    await t.page.click('#fin'); await t.page.waitForSelector('.modal');
-    assert.match(await texto(t.page, '.modal h2'), /no se encontró el espacio/);
-    assert.match(await texto(t.page, '.modal .sub'), /Bauducco.*Puntera/);
-    assert.ok(await t.page.isDisabled('[data-ok]'));
-    await t.page.fill('#mtxt', 'abcd'); assert.ok(await t.page.isDisabled('[data-ok]'));
-    await t.page.fill('#mtxt', 'No hay puntera en el local'); await t.page.click('[data-ok]');
-    await t.page.waitForSelector('.pdv-item');
-    await esperar(() => posts(t.srv, 'nota').length === 1, 6000, 'nota enviada');
-    const n = posts(t.srv, 'nota')[0]; assert.equal(n.tipo, 'Sin relevar: Puntera'); assert.equal(n.texto, 'No hay puntera en el local'); assert.equal(n.marca, 'Bauducco'); assert.ok(n.cid);
+    await t.page.click('#fin'); await t.page.waitForSelector('.pdv-item');
+    assert.equal(await t.page.$('.modal'), null); await dormir(500);
+    assert.equal(posts(t.srv, 'nota').length, 0);
   } finally { await t.cerrar(); }
 });
 test('Finalizar con todo lo esperado relevado no pide justificacion', async () => {

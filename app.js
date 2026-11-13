@@ -152,35 +152,11 @@
     document.getElementById('otro').onclick = () => { localStorage.removeItem('usuario'); state.usuario = null; ir('ci'); };
   }
 
-  // Al finalizar: si de una marca quedaron espacios sin relevar, se pide el motivo (queda guardado y se ve en el tablero).
+  // Al finalizar la visita se cierra el recorrido sin pedir motivos: el tablero muestra lo relevado y los espacios adicionales encontrados.
   function finalizarVisita() {
-    const faltan = C.MARCAS.map((m) => ({ marca: m, tocada: [...state.hechos].some((h) => h.startsWith(m + '|')), tipos: tiposEsperados(state.pdv, m).filter((t) => !state.hechos.has(m + '|' + t.id)) }))
-      .filter((x) => x.tocada && x.tipos.length);
-    const cerrar = () => { state.hechos = new Set(); state.extras = {}; state.marca = ''; try { localStorage.removeItem('visita'); } catch (e) { /* igual */ } ir('pdv'); };
-    if (!faltan.length) return cerrar();
-    let texto = '';
-    const m = document.createElement('div'); m.className = 'modal';
-    const valido = () => texto.trim().length >= 5;
-    const pintar = () => {
-      m.innerHTML = `<div class="modal-card"><button class="x" data-x aria-label="Cerrar">×</button>
-        <h2>¿Por qué no se encontró el espacio?</h2>
-        <div class="sub">${faltan.map((x) => `<b>${esc(x.marca)}</b>: faltan ${x.tipos.map((t) => esc(t.nombre)).join(', ')}`).join('<br>')}</div>
-        <textarea class="in" id="mtxt" rows="4" placeholder="Describe por qué no se encontró el espacio (obligatorio)" style="margin-top:12px;width:100%">${esc(texto)}</textarea>
-        <button class="btn teal block" data-ok style="margin-top:14px" ${valido() ? '' : 'disabled'}>Finalizar visita</button></div>`;
-      m.querySelector('[data-x]').onclick = () => m.remove();
-      const t = m.querySelector('#mtxt');
-      if (t) t.oninput = () => { texto = t.value; m.querySelector('[data-ok]').disabled = !valido(); };
-      m.querySelector('[data-ok]').onclick = async (e) => {
-        e.target.disabled = true; e.target.textContent = 'Guardando…';
-        const por = texto.trim();
-        try {
-          for (const x of faltan) await S.guardarNota({ pdv: state.pdv, marca: x.marca, tipo: 'Sin relevar: ' + x.tipos.map((q) => q.nombre).join(', '), ci: state.usuario.ci, relevador: state.usuario.nombre, texto: por });
-          m.remove(); pintarSync(); cerrar();
-        } catch (err) { toast('No se pudo guardar: ' + err.message); e.target.disabled = false; e.target.textContent = 'Finalizar visita'; }
-      };
-    };
-    pintar();
-    document.body.appendChild(m);
+    state.hechos = new Set(); state.extras = {}; state.marca = '';
+    try { localStorage.removeItem('visita'); } catch (e) { /* igual */ }
+    ir('pdv');
   }
 
   function pasoMarca() {
@@ -617,8 +593,8 @@
     const panelNotas = (lista, tit, sub, vacio, pref) => `<section class="panel"><div class="p-head"><i class="k-ico warn">${svg('warn', 18)}</i><div><h2>${tit}</h2><p>${sub}</p></div></div>
             ${lista.length ? lista.map((x) => `<div class="vis"><div class="vis-h"><div><b>${esc(x.pdv)} · ${esc(x.marca || '')}</b><small>${fmtFecha(x.ts)}</small></div><span class="chip org">${esc(String(x.tipo || '').replace(pref, ''))}</span></div><div class="an-l" style="margin-top:8px">Justificación</div><div class="an-box" style="min-height:0">${esc(x.texto)}</div></div>`).join('') : `<div class="empty">${vacio}</div>`}</section>`;
     const notasAdic = notas.filter((x) => /^Adicional:/.test(x.tipo || ''));
-    const secNotas = panelNotas(notas.filter((x) => !/^Adicional:/.test(x.tipo || '')), 'Espacios no encontrados', 'Puntos de venta visitados donde no se encontró el espacio, con la justificación del motivo.', 'No hay espacios no encontrados en este período', /^Sin relevar: /)
-      + (notasAdic.length ? panelNotas(notasAdic, 'Espacios fuera de la lista · ' + notasAdic.length, 'Espacios encontrados y relevados que no estaban contemplados en los acuerdos del punto de venta, con su motivo.', '', /^Adicional: /) : '');
+    // Solo se muestra lo que hoy configura el formulario: los espacios adicionales (fuera de la lista contemplada). Las notas "Sin relevar" antiguas ya no se muestran.
+    const secNotas = notasAdic.length ? panelNotas(notasAdic, 'Espacios fuera de la lista · ' + notasAdic.length, 'Espacios encontrados y relevados que no estaban contemplados en los acuerdos del punto de venta, con su motivo.', '', /^Adicional: /) : '';
 
     // ── Resumen: indicadores y estado por punto de venta (con filtro) ──
     const secResumen = `<section><h1>Resumen</h1><p class="sub">Avance del relevamiento y resultados del período.</p>
