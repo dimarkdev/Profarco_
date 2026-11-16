@@ -271,6 +271,29 @@ test('Zoom: control visible, botones y deslizador cambian el valor', async () =>
     await disparar(t.page, 1); assert.match(await texto(t.page, '[data-count]'), /^Fotos 1\/5/);   // se puede fotografiar con zoom
   } finally { await t.cerrar(); }
 });
+test('Colaboraciones: tras la marca se elige solo la marca o marca + otra, y el planograma se filtra', async () => {
+  const PV = [
+    { id: 'v1', pdv: '*', marca: 'Bauducco', tipo: 'Exhibidor', nombre: 'Biggie_Exhibidor_Bauducco-Fini.png', url: PX },
+    { id: 'v2', pdv: '*', marca: 'Bauducco', tipo: 'Exhibidor', nombre: 'Biggie_Exhibidor_Bauducco_Pan.png', url: PX },
+    { id: 'v3', pdv: '*', marca: 'Bauducco', tipo: 'Exhibidor', nombre: 'Biggie_Exhibidor_Bauducco.png', url: PX },
+  ];
+  const t = await nuevo({ srv: { planos: PV } }); try {
+    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Bauducco');
+    // despues de la marca aparece el paso de colaboraciones
+    await t.page.waitForSelector('.marca-b.colab');
+    assert.deepEqual(await t.page.$$eval('.marca-b.colab', (b) => b.map((x) => x.firstChild.textContent)), ['Solo Bauducco', 'Bauducco + Fini']);
+    // solo la marca: se ven las variantes propias (sin la colaboracion)
+    await t.page.click('.marca-b.colab[data-c="0"]'); await t.page.click('.tile[data-t="exhibidor"]');
+    await t.page.waitForSelector('.modal .var-b');
+    assert.deepEqual(await t.page.$$eval('.modal .var-b', (b) => b.map((x) => x.textContent)), ['Solo Bauducco', 'Bauducco · Pan']);
+    await t.page.click('.modal [data-x]'); await t.page.click('#atras'); await t.page.waitForSelector('.marca-b.colab');
+    // con Fini: solo la colaboracion
+    await t.page.click('.marca-b.colab[data-c="1"]'); await t.page.click('.tile[data-t="exhibidor"]');
+    await t.page.waitForSelector('.modal [data-go]');
+    assert.equal(await t.page.$('.modal .var-b'), null, 'una sola variante: sin botones');
+    assert.equal(await t.page.$('.modal [data-go][disabled]'), null);
+  } finally { await t.cerrar(); }
+});
 test('Doble toque en "Entendido, abrir camara" abre una sola camara', async () => {
   const t = await nuevo(); try {
     await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls', 'exhibidor');
@@ -283,6 +306,7 @@ test('Cerrar la camara con fotos pide confirmacion y descarta', async () => {
   const t = await nuevo(); try {
     await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls', 'exhibidor'); await pasarReferencia(t.page);
     await disparar(t.page, 1); await t.page.click('[data-cerrar]');
+    await t.page.waitForSelector('.modal-abandono'); await t.page.click('.modal-abandono [data-si]');
     await t.page.waitForSelector('.tile'); assert.equal(await t.page.$('.cam'), null);
     assert.equal(await t.page.$('.tile .hecho'), null);
   } finally { await t.cerrar(); }
@@ -407,7 +431,10 @@ grupo('Retroceder y retomar');
 test('Atras del telefono en preguntas: pide confirmar y vuelve a los espacios', async () => {
   const t = await nuevo(); try {
     await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls', 'exhibidor'); await pasarReferencia(t.page); await disparar(t.page, 2); await t.page.click('[data-listo]');
-    await t.page.waitForSelector('#guardar'); await t.page.goBack(); await t.page.waitForSelector('.tile');
+    await t.page.waitForSelector('#guardar'); await t.page.goBack(); await t.page.waitForSelector('.modal-abandono');
+    assert.match(await texto(t.page, '.modal-abandono h2'), /¿Está seguro que desea abandonar el relevamiento\?/);
+    await t.page.click('.modal-abandono [data-no]'); assert.ok(await t.page.$('#guardar'), 'seguir relevando conserva las preguntas');
+    await t.page.click('#abandonar'); await t.page.click('.modal-abandono [data-si]'); await t.page.waitForSelector('.tile');
     assert.equal(await t.page.$('.tile .hecho'), null); assert.equal(posts(t.srv, 'foto').length, 0);
   } finally { await t.cerrar(); }
 });
@@ -499,11 +526,11 @@ test('Tablero: ingreso con clave, resumen con indicadores y sin nombres de relev
   const t = await nuevo({ srv: { fotos: FOTOS_TAB, notas: NOTAS_TAB } }); try {
     await tablero(t);
     const cuerpo = await texto(t.page, 'body');
-    for (const s of ['Total de puntos de venta', 'Puntos de venta relevados', 'Espacios relevados', 'Respuestas favorables', 'Marcas con más relevamientos', 'Estado por cadena', 'Espacios no encontrados', 'Espacios fuera de la lista']) assert.ok(cuerpo.includes(s), 'falta: ' + s);
+    for (const s of ['Total de puntos de venta', 'Puntos de venta relevados', 'Espacios relevados', 'Cumplimiento', 'Marcas con más relevamientos', 'Estado por cadena', 'Espacios fuera de la lista']) assert.ok(cuerpo.includes(s), 'falta: ' + s);
     assert.ok(!cuerpo.includes('Secreto'), 'no debe verse el nombre del relevador');
     assert.ok(!/Exportar/.test(cuerpo), 'no hay boton de exportar');
     assert.ok(!/Cumplimiento de rutas/.test(cuerpo));
-    assert.match(cuerpo, /Motivo uno de prueba/); assert.match(cuerpo, /Isla adicional de prueba/);
+    assert.match(cuerpo, /Isla adicional de prueba/);
   } finally { await t.cerrar(); }
 });
 test('Tablero: las 2 fotos de un relevamiento forman una sola tarjeta con etiqueta "2 fotos"', async () => {
@@ -528,6 +555,63 @@ test('Tablero: tarjetas del resumen llevan a Espacios, Detalle y Evaluacion; fle
     await esperar(async () => /Detalle/.test(await texto(t.page, '.crumb b')), 3000, 'vista Detalle');
   } finally { await t.cerrar(); }
 });
+test('Tablero: el porcentaje de cumplimiento es cumple / auditadas, sin mezclar respuestas ni puntos sin relevar', async () => {
+  const t = await nuevo({ srv: { fotos: FOTOS_TAB, notas: NOTAS_TAB } }); try {
+    await tablero(t);
+    const cuerpo = await texto(t.page, 'body');
+    assert.match(cuerpo, /1 de 2 góndolas auditadas cumplen/);   // PDV Uno cumple, PDV Dos no
+    assert.ok(!/Respuestas favorables/.test(cuerpo));
+    assert.match(await texto(t.page, '.k-grid'), /50%/);
+  } finally { await t.cerrar(); }
+});
+test('Tablero: el buscador de texto filtra por punto de venta, marca o respuesta y conserva el cursor', async () => {
+  const t = await nuevo({ srv: { fotos: FOTOS_TAB, notas: NOTAS_TAB } }); try {
+    await tablero(t); await t.page.click('.nav-b[data-v="ev"]'); await t.page.waitForSelector('#bq');
+    await t.page.click('#bq'); await t.page.keyboard.type('hal');
+    await esperar(async () => (await t.page.$$('.g-item')).length === 1, 3000, 'una sola tarjeta con "hal"');
+    assert.match(await texto(t.page, '.galeria'), /PDV Dos/);
+    assert.equal(await t.page.evaluate(() => document.activeElement.id), 'bq', 'el cursor sigue en el buscador');
+    await t.page.keyboard.type('xyz');
+    await esperar(async () => (await t.page.$$('.g-item')).length === 0, 3000, 'sin resultados');
+    await t.page.fill('#bq', 'uno'); await esperar(async () => (await t.page.$$('.g-item')).length === 1, 3000, 'punto de venta Uno');
+  } finally { await t.cerrar(); }
+});
+test('Tablero: las fotos se pueden girar y el giro se recuerda', async () => {
+  const t = await nuevo({ srv: { fotos: FOTOS_TAB, notas: NOTAS_TAB } }); try {
+    await tablero(t); await t.page.click('.nav-b[data-v="eval"]'); await t.page.waitForSelector('.cmp-f .rot');
+    await t.page.click('.cmp-c:last-child .cmp-f [data-rot="90"]');
+    const tr = await t.page.$eval('.cmp-c:last-child .cmp-f img', (e) => e.style.transform);
+    assert.match(tr, /rotate\(90deg\)/);
+    await t.page.reload();
+    await t.page.waitForSelector('.side'); await t.page.click('.nav-b[data-v="eval"]'); await t.page.waitForSelector('.cmp-f img');
+    await esperar(async () => /rotate\(90deg\)/.test(await t.page.$eval('.cmp-c:last-child .cmp-f img', (e) => e.style.transform)), 3000, 'giro recordado');
+    await t.page.click('.cmp-c:last-child .cmp-f img'); await t.page.waitForSelector('.lb [data-rot]');
+    await t.page.click('.lb [data-rot="-90"]');
+    assert.equal(await t.page.$eval('.lb img', (e) => e.style.transform), '', 'volvio a 0 grados');
+  } finally { await t.cerrar(); }
+});
+test('Tablero: "Ver puntos de venta" abre el panel lateral de la cadena con avance, listas y buscador', async () => {
+  const t = await nuevo({ srv: { fotos: FOTOS_TAB, notas: NOTAS_TAB } }); try {
+    await tablero(t); await t.page.waitForSelector('.cr-ver'); await t.page.click('.cr-ver');
+    await t.page.waitForSelector('.dr');
+    const c = await texto(t.page, '.dr');
+    assert.match(c, /relevados/); assert.match(c, /Sin relevar/); assert.match(c, /Relevados/);
+    await t.page.keyboard.press('Escape'); await esperar(async () => !(await t.page.$('.dr')), 3000, 'cierra con Esc');
+  } finally { await t.cerrar(); }
+});
+test('Tablero: el visor de imagenes avanza y retrocede con los botones y con las flechas del teclado', async () => {
+  const t = await nuevo({ srv: { fotos: FOTOS_TAB, notas: NOTAS_TAB } }); try {
+    await tablero(t); await t.page.click('.nav-b[data-v="ev"]'); await t.page.waitForSelector('.g-item');
+    await t.page.click('.g-item .n-fotos');   // relevamiento de 2 fotos (con planograma o sin el)
+    await t.page.waitForSelector('.lb .lb-n.r');
+    const pos = async () => (await texto(t.page, '.lb-head .t')).match(/(\d+) \/ (\d+)/);
+    assert.equal((await pos())[1], '1');
+    await t.page.click('.lb .lb-n.r'); assert.equal((await pos())[1], '2');
+    await t.page.keyboard.press('ArrowLeft'); assert.equal((await pos())[1], '1');
+    await t.page.keyboard.press('ArrowRight'); assert.equal((await pos())[1], '2');
+    await t.page.keyboard.press('Escape'); await esperar(async () => !(await t.page.$('.lb')), 3000, 'Esc cierra el visor');
+  } finally { await t.cerrar(); }
+});
 test('Tablero: el menu lateral conserva su estilo (regresion de la clase nav-b)', async () => {
   const t = await nuevo({ ancho: 1280, srv: { fotos: FOTOS_TAB } }); try {
     await tablero(t);
@@ -542,6 +626,7 @@ let ok = 0, fallos = [];
 console.log(`\nSitio de prueba: ${BASE}\nNavegador: ${CHROME}\n`);
 for (const c of casos) {
   if (c.grupo) { console.log('\n■ ' + c.grupo); continue; }
+  if (process.env.TEST_FILTRO && !new RegExp(process.env.TEST_FILTRO, 'i').test(c.nombre)) continue;   // TEST_FILTRO=texto corre solo las pruebas que lo contengan
   const t0 = Date.now();
   try { await c.fn(); ok++; console.log(`  ✓ ${c.nombre}  (${((Date.now() - t0) / 1000).toFixed(1)} s)`); }
   catch (e) { fallos.push({ nombre: c.nombre, e }); console.log(`  ✗ ${c.nombre}\n      ${String(e.message || e).split('\n').slice(0, 4).join('\n      ')}`); }

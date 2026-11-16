@@ -32,16 +32,54 @@
   }
 
   // Lightbox: una o varias imagenes lado a lado. Tocar la imagen acerca/aleja.
-  function lightbox(items, tagsHtml) {
+  // Giro de fotos (solo en el tablero): se recuerda por foto en este navegador. Las fotos se toman de pie y a veces conviene verlas giradas.
+  const rotLeer = (url) => { try { return (JSON.parse(localStorage.getItem('rot-fotos') || '{}')[url] || 0); } catch (e) { return 0; } };
+  const rotGuardar = (url, deg) => { try { const m = JSON.parse(localStorage.getItem('rot-fotos') || '{}'); if (deg) m[url] = deg; else delete m[url]; localStorage.setItem('rot-fotos', JSON.stringify(m)); } catch (e) { /* sin almacenamiento */ } };
+  // Aplica el giro a una imagen y la achica lo necesario para que siga entrando en su recuadro.
+  function rotAplicar(img, deg) {
+    img.style.margin = '';
+    if (!deg) { img.style.transform = ''; return; }
+    if (deg % 180 === 0) { img.style.transform = `rotate(${deg}deg)`; return; }
+    const go = () => {
+      const w = img.offsetWidth, h = img.offsetHeight, lb = img.closest('.lb'), p = img.parentElement;
+      if (!w || !h) return;
+      if (lb && lb.classList.contains('zoom')) { img.style.transform = `rotate(${deg}deg)`; return; }
+      let s;
+      if (lb) { s = Math.min(1, p.clientWidth / h, (parseFloat(getComputedStyle(img).maxHeight) || innerHeight - 170) / w); img.style.margin = `${Math.max(0, (w * s - h) / 2) || (w * s - h) / 2}px 0`; }
+      else s = Math.min(p.clientWidth / h, p.clientHeight / w);
+      img.style.transform = `rotate(${deg}deg) scale(${s.toFixed(3)})`;
+    };
+    if (img.complete && img.naturalWidth) go(); else img.addEventListener('load', go, { once: true });
+  }
+  const BTN_GIRO = (url) => `<span class="rot" data-url="${esc(url)}"><button type="button" data-rot="-90" aria-label="Girar a la izquierda" title="Girar a la izquierda">⟲</button><button type="button" data-rot="90" aria-label="Girar a la derecha" title="Girar a la derecha">⟳</button></span>`;
+
+  // Visor de imagenes: una a la vez, con flechas en pantalla y del teclado (← →); Esc cierra.
+  function lightbox(items, tagsHtml, girar) {
     const el = document.createElement('div');
     el.className = 'lb';
-    el.innerHTML = `<div class="lb-head"><span class="t">Toca la imagen para acercar</span><button class="lb-x" data-x aria-label="Cerrar">×</button></div>
-      <div class="lb-body">${items.map((i) => `<figure><img src="${esc(i.url)}" alt="">${i.caption ? `<div>${esc(i.caption)}</div>` : ''}${i.tags ? `<div class="lb-tags">${i.tags}</div>` : ''}</figure>`).join('')}</div>`;
+    let k = 0;
+    const cerrar = () => { document.removeEventListener('keydown', tecla); el.remove(); };
+    const pintar = () => {
+      const i = items[k], n = items.length;
+      el.innerHTML = `<div class="lb-head"><span class="t">${n > 1 ? `${k + 1} / ${n} · ` : ''}Toca la imagen para acercar${girar ? ' · usa ⟲ ⟳ para girarla' : ''}</span><button class="lb-x" data-x aria-label="Cerrar">×</button></div>
+        <div class="lb-body"><figure><img src="${esc(i.url)}" alt="">${girar ? BTN_GIRO(i.url) : ''}${i.caption ? `<div>${esc(i.caption)}</div>` : ''}${i.tags ? `<div class="lb-tags">${i.tags}</div>` : ''}</figure></div>
+        ${n > 1 ? '<button class="lb-n l" data-n="-1" aria-label="Anterior">‹</button><button class="lb-n r" data-n="1" aria-label="Siguiente">›</button>' : ''}`;
+      if (girar) rotAplicar(el.querySelector('img'), rotLeer(i.url));
+    };
+    const ir = (d) => { if (items.length > 1) { k = (k + d + items.length) % items.length; pintar(); } };
+    function tecla(e) { if (e.key === 'ArrowRight') ir(1); else if (e.key === 'ArrowLeft') ir(-1); else if (e.key === 'Escape') cerrar(); }
     el.addEventListener('click', (e) => {
-      if (e.target.closest('[data-x]')) el.remove();
-      else if (e.target.tagName === 'IMG') el.classList.toggle('zoom');
+      const r = e.target.closest('[data-rot]');
+      if (r) { const url = r.parentElement.dataset.url, d = (((rotLeer(url) + +r.dataset.rot) % 360) + 360) % 360; rotGuardar(url, d); rotAplicar(el.querySelector('img'), d); return; }
+      const b = e.target.closest('[data-n]');
+      if (b) { ir(+b.dataset.n); return; }
+      if (e.target.closest('[data-x]')) cerrar();
+      else if (e.target.tagName === 'IMG') { el.classList.toggle('zoom'); if (girar) rotAplicar(el.querySelector('img'), rotLeer(items[k].url)); }
     });
+    document.addEventListener('keydown', tecla);
+    pintar();
     document.body.appendChild(el);
+    if (girar) rotAplicar(el.querySelector('img'), rotLeer(items[k].url));
   }
 
   // Progreso de la visita (punto de venta, espacios ya relevados y justificaciones): se guarda en el telefono para retomarlo del mismo dia.
@@ -66,7 +104,7 @@
     fotos: [],                             // [{blob, url}] tomadas en la camara, sin guardar
     criterios: new Set(),
     filtroPdv: '',
-    tab: { desde: '', hasta: '', pdv: '', marca: '', relevador: '', tipo: '', criterio: '' },
+    tab: { desde: '', hasta: '', pdv: '', marca: '', relevador: '', tipo: '', criterio: '', q: '' },
     datos: null,
   };
   // Drive no admite "/" en nombres de carpeta: el receptor guarda "Bandeja - lateral".
@@ -77,6 +115,33 @@
     const cand = state.planos.filter((q) => mismoTipo(q.marca, marca) && mismoTipo(q.tipo, t));
     const exactos = cand.filter((q) => q.pdv === pdv);
     return exactos.length ? exactos : cand.filter((q) => q.pdv === '*');
+  };
+  // Variantes de un planograma segun el nombre del archivo: Cadena_Tipo_Marca[-Marca2][_detalle].ext
+  //   "Fini" -> "Solo Fini" · "Bauducco-Fini" -> "Bauducco + Fini" · "Fini_12_ganchos" -> "Fini · 12 ganchos"
+  const limpiaMarca = (x) => String(x || '').normalize('NFD').replace(/[̀-ͯ’'`]/g, '').toLowerCase();
+  const marcaBonita = (x) => (C.MARCAS.find((m) => limpiaMarca(m) === limpiaMarca(x)) || x);
+  const variantePlano = (p) => {
+    const m = /^[^_]+_[^_]+_([^_]+)(?:_(.+?))?\.[A-Za-z0-9]+$/.exec(p.nombre || '');
+    if (!m) return { etiqueta: 'Planograma', orden: 0, marcas: [] };
+    const marcas = m[1].split('-').map(marcaBonita), det = (m[2] || '').replace(/_/g, ' ');
+    if (marcas.length > 1) return { etiqueta: marcas.join(' + ') + (det ? ' · ' + det : ''), orden: 2, marcas };
+    return det ? { etiqueta: marcas[0] + ' · ' + det, orden: 1, marcas } : { etiqueta: 'Solo ' + marcas[0], orden: 0, marcas };
+  };
+  const variantesDe = (ps) => {
+    const g = new Map();
+    ps.forEach((p) => { const v = variantePlano(p); if (!g.has(v.etiqueta)) g.set(v.etiqueta, { etiqueta: v.etiqueta, orden: v.orden, marcas: v.marcas, planos: [] }); g.get(v.etiqueta).planos.push(p); });
+    return [...g.values()].sort((x, y) => x.orden - y.orden || x.etiqueta.localeCompare(y.etiqueta));
+  };
+  // Colaboraciones de una marca (planogramas con dos marcas): ["Fini"] para Bauducco. state.colab: '' = solo la marca, 'Fini' = con Fini, '*' = todas.
+  const colaboraciones = (marca) => {
+    const g = new Map();
+    state.planos.filter((q) => mismoTipo(q.marca, marca)).forEach((q) => variantePlano(q).marcas.filter((x) => limpiaMarca(x) !== limpiaMarca(marca)).forEach((x) => g.set(limpiaMarca(x), x)));
+    return [...g.values()].sort((a, b) => a.localeCompare(b));
+  };
+  const segunColab = (vars) => {
+    const c = state.colab || '';
+    const f = vars.filter((v) => (c === '' ? v.marcas.length <= 1 : c === '*' ? v.marcas.length > 1 : v.marcas.some((x) => limpiaMarca(x) === limpiaMarca(c))));
+    return !f.length && c === '' ? vars : f;   // sin planograma de la marca sola, se muestra lo que haya
   };
   const nombresPdv = () => [...new Set([...state.pdvs.map((p) => p.nombre), ...state.planos.map((p) => p.pdv).filter((n) => n !== '*')])].sort((a, b) => a.localeCompare(b));
 
@@ -97,7 +162,7 @@
   function pintarCampo() {
     if (!state.usuario) paso = 'ci';
     else if (paso === 'ci') paso = 'pdv';
-    ({ ci: pasoCI, pdv: pasoPdv, marca: pasoMarca, tipos: pasoTipos, criterios: pasoCriterios }[paso] || pasoCI)();
+    ({ ci: pasoCI, pdv: pasoPdv, marca: pasoMarca, colab: pasoColab, tipos: pasoTipos, criterios: pasoCriterios }[paso] || pasoCI)();
   }
 
   function pasoCI(confirmando) {
@@ -168,18 +233,29 @@
       ${state.hechos.size ? '<button class="btn primary block" id="fin" style="margin-top:22px">Finalizar visita</button>' : ''}</div>`;
     document.getElementById('atras').onclick = () => ir('pdv');
     document.getElementById('fin')?.addEventListener('click', finalizarVisita);
-    $app.querySelectorAll('[data-m]').forEach((b) => b.onclick = () => { state.marca = b.dataset.m; ir('tipos'); });
+    $app.querySelectorAll('[data-m]').forEach((b) => b.onclick = () => { state.marca = b.dataset.m; state.colab = ''; state.hayColab = colaboraciones(state.marca).length > 0; ir(state.hayColab ? 'colab' : 'tipos'); });
+  }
+
+  // Marcas que tienen planogramas en colaboracion con otra: se elige "solo la marca" o "la marca + la otra" antes de los espacios.
+  function pasoColab() {
+    const m = state.marca, cs = colaboraciones(m);
+    const ops = [{ v: '', t: 'Solo ' + m, d: 'Espacios propios de la marca' }, ...cs.map((c) => ({ v: c, t: m + ' + ' + c, d: 'Colaboración entre las dos marcas' })), ...(cs.length > 1 ? [{ v: '*', t: 'Todas las colaboraciones', d: 'Con cualquier otra marca' }] : [])];
+    $app.innerHTML = `<div class="wrap"><h1>${esc(m)}</h1><p class="lead">¿Qué vas a relevar?</p>
+      <div class="row" style="margin-top:22px"><button class="back" id="atras" aria-label="Volver">${ICON_BACK}</button><div class="sede">${esc(state.pdv)}</div></div>
+      <div class="marcas">${ops.map((o, k) => `<button class="marca-b colab" data-c="${k}">${esc(o.t)}<small>${esc(o.d)}</small></button>`).join('')}</div></div>`;
+    document.getElementById('atras').onclick = () => ir('marca');
+    $app.querySelectorAll('[data-c]').forEach((b) => b.onclick = () => { state.colab = ops[+b.dataset.c].v; ir('tipos'); });
   }
 
   function pasoTipos() {
     const ico = '<svg viewBox="0 0 24 24" width="54" height="54" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></svg>';
     $app.innerHTML = `<div class="wrap"><h1>Tipo de espacio</h1><p class="lead">Selecciona el espacio a auditar</p>
       <div class="row" style="margin-top:22px"><button class="back" id="atras" aria-label="Volver">${ICON_BACK}</button><div class="sede">${esc(state.pdv)}</div></div>
-      <div class="sede-sub"><span>${esc(state.marca)}</span></div>
+      <div class="sede-sub"><span>${esc(state.marca)}${state.colab === '*' ? ' + colaboraciones' : state.colab ? ' + ' + esc(state.colab) : ''}</span></div>
       <div class="tiles">${primeroLosDelPunto(tiposDeMarca(state.marca), (t) => esperado(state.pdv, state.marca, t)).map((t) => `<button class="tile ${t.img ? '' : 'sin-img'} ${esperado(state.pdv, state.marca, t) ? (esperadosDe(state.pdv) ? 'esp' : '') : 'fuera'}" data-t="${t.id}" style="background:${t.color}">${state.hechos.has(state.marca + '|' + t.id) ? `<span class="hecho">✓ Relevado</span>${esperado(state.pdv, state.marca, t) ? '' : '<span class="adic">Adicional</span>'}` : ''}${t.img ? `<img src="${t.img}" alt="">` : `<span class="tile-ico">${ico}</span>`}<b>${esc(t.nombre)}</b></button>`).join('')}</div>
       ${esperadosDe(state.pdv) ? '<p class="leyenda"><i class="pto"></i><span>Espacio contemplado en el acuerdo · los demás también se pueden relevar y quedan como adicionales</span></p>' : ''}
       ${state.hechos.size ? '<button class="btn primary block" id="fin" style="margin-top:22px">Finalizar visita</button>' : ''}</div>`;
-    document.getElementById('atras').onclick = () => ir('marca');
+    document.getElementById('atras').onclick = () => ir(state.hayColab ? 'colab' : 'marca');
     precargarPlanos();
     document.getElementById('fin')?.addEventListener('click', finalizarVisita);
     $app.querySelectorAll('[data-t]').forEach((b) => b.onclick = () => {
@@ -205,6 +281,20 @@
     document.body.appendChild(m);
   }
 
+  // Ventana de confirmacion al abandonar un relevamiento en curso (fotos y respuestas sin guardar).
+  function confirmarAbandono(alAbandonar) {
+    if (document.querySelector('.modal-abandono')) return;
+    const m = document.createElement('div'); m.className = 'modal modal-abandono';
+    m.innerHTML = `<div class="modal-card"><button class="x" data-x aria-label="Cerrar">×</button>
+      <h2>¿Está seguro que desea abandonar el relevamiento?</h2>
+      <div class="sub">Se perderán las fotos y respuestas que todavía no guardó.</div>
+      <div class="row" style="margin-top:14px;gap:10px"><button class="btn" data-si>Abandonar</button><button class="btn teal" data-no>Seguir relevando</button></div></div>`;
+    m.querySelector('[data-x]').onclick = m.querySelector('[data-no]').onclick = () => m.remove();
+    m.querySelector('[data-si]').onclick = () => { m.remove(); alAbandonar(); };
+    document.body.appendChild(m);
+  }
+  function descartarRelevamiento() { state.fotos.forEach((f) => URL.revokeObjectURL(f.url)); state.fotos = []; ir('tipos'); }
+
   // Al elegir la marca se bajan por adelantado los planogramas de los espacios que corresponden: al abrir la ventana ya estan.
   function precargarPlanos() {
     if (!esperadosDe(state.pdv)) return;
@@ -216,8 +306,9 @@
     if (state.abriendoRef) return;   // evita abrir dos ventanas con toques repetidos
     state.abriendoRef = true;
     if (!state.planosListo && !state.planos.length) { toast('Cargando planogramas…'); await state.planosP; }
-    const ps = planosDe(state.pdv, state.marca, state.tipo.id);
-    let i = 0; const vistas = new Set([0]);
+    const vars = segunColab(variantesDe(planosDe(state.pdv, state.marca, state.tipo.id)));
+    let vi = 0, ps = vars.length ? vars[0].planos : [];
+    let i = 0; let vistas = new Set([0]);
     const m = document.createElement('div');
     m.className = 'modal';
     const cerrarRef = () => { m.remove(); state.abriendoRef = false; };
@@ -226,15 +317,17 @@
       const listo = !ps.length || vistas.size === ps.length;
       m.innerHTML = `<div class="modal-card"><button class="x" data-x aria-label="Cerrar">×</button>
         <h2>Planograma de Referencia</h2><div class="sub">${esc(state.marca)} · ${esc(state.tipo.nombre)}</div>
+        ${vars.length > 1 ? `<div class="vars" role="group" aria-label="Variante del planograma">${vars.map((v, k) => `<button type="button" class="var-b ${k === vi ? 'on' : ''}" data-v="${k}">${esc(v.etiqueta)}</button>`).join('')}</div>` : ''}
         ${ps.length ? `<div class="ref"><img src="${esc(ps[i].url)}" alt="Planograma">
             ${ps.length > 1 ? '<button class="arrow l" data-n="-1" aria-label="Anterior">‹</button><button class="arrow r" data-n="1" aria-label="Siguiente">›</button>' : ''}</div>
           ${ps.length > 1 ? `<div class="dots">${ps.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div>` : ''}`
-          : '<div class="empty">Todavía no hay planograma de referencia de esta marca para este espacio.</div>'}
+          : `<div class="empty">Todavía no hay planograma de referencia de ${state.colab ? 'esta colaboración' : 'esta marca'} para este espacio.</div>`}
         <div class="hint">${listo ? (ps.length ? 'Toca la imagen para acercarla' : '') : `Mira las ${ps.length} imágenes para continuar`}</div>
         <button class="btn teal block" data-go ${listo ? '' : 'disabled'}>Entendido, abrir cámara</button></div>`;
       m.querySelector('[data-x]').onclick = () => cerrarRef();
-      m.querySelector('img')?.addEventListener('click', () => lightbox([{ url: ps[i].url }]));
+      m.querySelector('.ref img')?.addEventListener('click', () => lightbox([{ url: ps[i].url }]));
       m.querySelectorAll('[data-n]').forEach((b) => b.onclick = () => { i = (i + +b.dataset.n + ps.length) % ps.length; pintar(); });
+      m.querySelectorAll('[data-v]').forEach((b) => b.onclick = () => { vi = +b.dataset.v; ps = vars[vi].planos; i = 0; vistas = new Set([0]); pintar(); });
       m.querySelector('[data-go]').onclick = () => { cerrarRef(); abrirCamara(false); };
     };
     pintar();
@@ -312,12 +405,11 @@
     };
     q('[data-file]').onchange = (e) => { for (const f of e.target.files) agregar(f); e.target.value = ''; };
     q('[data-ref]').onclick = () => lightbox(planosDe(state.pdv, state.marca, state.tipo.id).map((p, k, a) => ({ url: p.url, caption: `Planograma ${k + 1} de ${a.length}` })));
-    q('[data-cerrar]').onclick = () => {
-      const nuevas = state.fotos.length - base.length;
-      if (nuevas && !confirm(`Se descartarán ${nuevas} foto(s) sin guardar. ¿Cerrar?`)) return;
+    const cerrarCam = () => {
       state.fotos.slice(base.length).forEach((f) => URL.revokeObjectURL(f.url));
       state.fotos = base; salir(); ir(sumar ? 'criterios' : 'tipos');
     };
+    q('[data-cerrar]').onclick = () => { if (state.fotos.length - base.length) confirmarAbandono(cerrarCam); else cerrarCam(); };
     q('[data-listo]').onclick = () => { if (state.fotos.length < C.MIN_FOTOS) return; if (!sumar) state.criterios = new Set(); salir(); ir('criterios'); };
     actualizar();
   }
@@ -333,10 +425,12 @@
     let nro = 0;
     const completo = visibles.every((q) => q.opciones.some((o) => sel.has(o.id)));
     $app.innerHTML = `<div class="wrap"><h1>Relevamiento</h1><p class="lead">${esc(state.pdv)} · ${esc(state.marca)} · ${esc(state.tipo.nombre)}</p>
+      <div class="row" style="margin-top:14px"><button class="back" id="abandonar" aria-label="Abandonar relevamiento">${ICON_BACK}</button></div>
       <div class="thumbs">${state.fotos.map((f, i) => `<div class="foto"><img src="${esc(f.url)}" alt=""><button class="x" data-del="${i}" aria-label="Quitar">×</button></div>`).join('')}</div>
       ${visibles.map((q) => `<div class="preg"><h2>${q.numero ? ++nro + '. ' : ''}${esc(q.titulo)}</h2>${q.nota ? `<p class="muted">${esc(q.nota)}</p>` : ''}
         <div class="opts">${q.opciones.map((o) => `<button class="opt radio ${sel.has(o.id) ? 'on' : ''}" data-c="${o.id}"><span class="box"></span>${esc(o.texto)}</button>`).join('')}</div></div>`).join('')}
       <div class="sticky-bar"><div class="row"><button class="btn" id="mas" ${state.fotos.length >= C.MAX_FOTOS ? 'disabled' : ''}>+ Foto</button><button class="btn teal block" id="guardar" ${completo && state.fotos.length >= C.MIN_FOTOS ? '' : 'disabled'}>Guardar relevamiento</button></div>${state.fotos.length < C.MIN_FOTOS ? `<p class="muted" style="text-align:center;margin:8px 0 0">Faltan ${C.MIN_FOTOS - state.fotos.length} foto(s) obligatoria(s)</p>` : ''}</div></div>`;
+    document.getElementById('abandonar').onclick = () => confirmarAbandono(descartarRelevamiento);
     $app.querySelectorAll('[data-c]').forEach((b) => b.onclick = () => {
       const c = criterioDe(b.dataset.c);
       C.CRITERIOS.filter((x) => x.grupo === c.grupo).forEach((x) => sel.delete(x.id));   // una sola opcion por pregunta
@@ -452,7 +546,16 @@
     const f = state.tab, todas = state.datos || [];
     const hoy = diaISO(Date.now());
     const opt = (k) => [...new Set(todas.map((x) => x[k]).filter(Boolean))].sort();
+    // Buscador de texto libre: cada palabra debe aparecer en el punto de venta, cadena, marca, espacio, fecha o respuestas.
+    const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    const palabras = norm(f.q).split(/\s+/).filter(Boolean);
+    const cadenaDe = {}; state.pdvs.forEach((p) => { cadenaDe[p.nombre] = p.cadena || ''; });
+    const pajar = (x) => norm([x.pdv, cadenaDe[x.pdv], x.marca, x.tipo, fmtFecha(x.ts), diaISO(x.ts), ...(x.criterios || []).map((id) => criterioDe(id).texto)].join(' '));
+    const coincide = (x) => !palabras.length || ((s) => palabras.every((w) => s.includes(w)))(pajar(x));
+    const coincidePdv = (nombre) => !palabras.length || ((s) => palabras.every((w) => s.includes(w)))(norm(nombre + ' ' + (cadenaDe[nombre] || '')));
+    const enfoque = document.activeElement && document.activeElement.id === 'bq' ? document.activeElement.selectionStart : -1;
     const base = todas.filter((x) =>
+      coincide(x) &&
       (!f.desde || diaISO(x.ts) >= f.desde) && (!f.hasta || diaISO(x.ts) <= f.hasta) &&
       (!f.marca || x.marca === f.marca) && (!f.relevador || x.relevador === f.relevador) && (!f.tipo || x.tipo === f.tipo) &&
       (!f.criterio || (x.criterios || []).includes(f.criterio))).sort((a, b) => b.ts - a.ts);
@@ -498,13 +601,9 @@
     const n = V.length, c = cnt(V, 'cumple'), p = cnt(V, 'parcial'), nc = cnt(V, 'no_cumple'), sin = n - c - p - nc;
     const conRes = c + p + nc, pctCumple = pct(c, conRes);
     const pdvsAll = [...new Set([...nombresPdv(), ...base.map((x) => x.pdv)])].sort((a, b) => a.localeCompare(b));
-    const pdvsVista = f.pdv ? pdvsAll.filter((q) => q === f.pdv) : pdvsAll;
+    const pdvsVista = (f.pdv ? pdvsAll.filter((q) => q === f.pdv) : pdvsAll).filter((q) => !palabras.length || coincidePdv(q) || base.some((x) => x.pdv === q));
     const relevados = pdvsVista.filter((q) => V.some((v) => v.pdv === q)).length;
     const pctRuta = pct(relevados, pdvsVista.length);
-    // Promedio de respuestas: parte de las respuestas dadas que son favorables (tono ok).
-    let respTot = 0, respOk = 0;
-    V.forEach((v) => C.PREGUNTAS.forEach((q) => { const o = q.opciones.find((x) => v.criterios.includes(x.id)); if (o) { respTot++; if (o.tono === 'ok') respOk++; } }));
-    const pctResp = pct(respOk, respTot);
     const kpi = (cls, icono, titulo, valor, extra, ir) => `<${ir ? `button type="button" class="k-card k-link" data-v="${ir}" title="Ver ${titulo.toLowerCase()}"` : 'div class="k-card"'}><div class="k-top"><span>${titulo}</span><i class="k-ico ${cls}">${svg(icono, 18)}</i></div><div class="k-row"><div class="k-val">${valor}</div>${extra || ''}</div></${ir ? 'button' : 'div'}>`;
 
     // ── Estado por punto de venta ──
@@ -523,8 +622,8 @@
     filasPdv.forEach((r) => { const k = cadDe[r.nombre] || 'Sin cadena'; (cadenas[k] = cadenas[k] || []).push(r); });
     const filasCad = Object.keys(cadenas).map((k) => {
       const rs = cadenas[k], cc = rs.reduce((s, r) => s + r.cc, 0), tot = rs.reduce((s, r) => s + r.cc + r.pp + r.nn, 0);
-      return { nombre: k, pdvs: rs, total: rs.length, rel: rs.filter((r) => r.n).length, n: rs.reduce((s, r) => s + r.n, 0), cc, pc: pct(cc, tot) };
-    }).sort((a, b) => (b.pc ?? -1) - (a.pc ?? -1) || b.total - a.total || a.nombre.localeCompare(b.nombre));
+      return { nombre: k, pdvs: rs, total: rs.length, rel: rs.filter((r) => r.n).length, n: rs.reduce((s, r) => s + r.n, 0), cc, tot, pc: pct(cc, tot) };
+    }).sort((a, b) => b.rel / b.total - a.rel / a.total || b.total - a.total || a.nombre.localeCompare(b.nombre));
     const cadSel = filasCad.find((x) => x.nombre === state.cadena) || null;
     const seg = (cls, v, tot) => (v ? `<i class="${cls}" style="width:${(v / tot) * 100}%"></i>` : '');
 
@@ -561,7 +660,7 @@
         (neg.length ? `Observaciones: ${neg.map((x) => x.q.corto.toLowerCase() + ' (' + x.o.texto.toLowerCase() + ')').join('; ')}.` : 'Todas las respuestas fueron favorables.');
       // Si hay mas de una imagen, al pasar el mouse aparece un degradado suave en los costados para cambiar de imagen.
       const carro = (key, urls, alt, vacio, i0) => (urls.length
-        ? `<div class="cmp-f car" data-car="${key}"><img src="${esc(urls[i0])}" alt="${alt}" data-z="${esc(urls[i0])}">${urls.length > 1
+        ? `<div class="cmp-f car" data-car="${key}"><img src="${esc(urls[i0])}" alt="${alt}" data-z="${esc(urls[i0])}">${BTN_GIRO(urls[i0])}${urls.length > 1
           ? `<button class="car-e l" data-d="-1" aria-label="Anterior">‹</button><button class="car-e r" data-d="1" aria-label="Siguiente">›</button><div class="car-d">${urls.map((_, k) => `<i class="${k === i0 ? 'on' : ''}"></i>`).join('')}</div>` : ''}</div>`
         : `<div class="cmp-f"><div class="cmp-vacio">${vacio}</div></div>`);
       const nF = sel.fotos.length;
@@ -584,7 +683,8 @@
     const select = (k, label, vals) => `<label class="f-sel"><span>${label}</span><select data-f="${k}"><option value="">Todos</option>${vals.map((v) => `<option ${f[k] === v ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label>`;
     const per = (id, txt) => `<button class="seg-b ${state.periodo === id ? 'on' : ''}" data-p="${id}">${txt}</button>`;
     const nav = (id, ic, txt) => `<button class="nav-b ${vista === id ? 'on' : ''}" data-v="${id}">${svg(ic, 19)}<span>${txt}</span></button>`;
-    const filtros = `<div class="filt">${select('pdv', 'Punto de venta', opt('pdv'))}${select('marca', 'Marca', opt('marca'))}${select('tipo', 'Tipo de espacio', C.TIPOS.map((t) => t.nombre))}
+    const buscador = `<label class="f-sel f-q"><span>Buscar</span><input type="search" id="bq" placeholder="Punto de venta, cadena, marca, espacio, fecha…" value="${esc(f.q)}" autocomplete="off"></label>`;
+    const filtros = `<div class="filt">${buscador}${select('pdv', 'Punto de venta', opt('pdv'))}${select('marca', 'Marca', opt('marca'))}${select('tipo', 'Tipo de espacio', C.TIPOS.map((t) => t.nombre))}
               <label class="f-sel"><span>Respuesta</span><select data-f="criterio"><option value="">Todas</option>${C.CRITERIOS.filter((cr) => !cr.derivado).map((cr) => `<option value="${cr.id}" ${f.criterio === cr.id ? 'selected' : ''}>${esc(cr.etiqueta || cr.texto)}</option>`).join('')}</select></label>
               <label class="f-sel"><span>Desde</span><input type="date" data-f="desde" value="${f.desde}"></label><label class="f-sel"><span>Hasta</span><input type="date" data-f="hasta" value="${f.hasta}"></label></div>`;
 
@@ -596,26 +696,36 @@
     // Solo se muestra lo que hoy configura el formulario: los espacios adicionales (fuera de la lista contemplada). Las notas "Sin relevar" antiguas ya no se muestran.
     const secNotas = notasAdic.length ? panelNotas(notasAdic, 'Espacios fuera de la lista · ' + notasAdic.length, 'Espacios encontrados y relevados que no estaban contemplados en los acuerdos del punto de venta, con su motivo.', '', /^Adicional: /) : '';
 
+    // ── Panel lateral de una cadena: avance, indicadores y puntos de venta (sin relevar / relevados) ──
+    const iniciales = (nombre) => String(nombre).replace(/[^\p{L}\p{N} ]/gu, ' ').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+    const drawerCadena = (cd) => {
+      const a = pct(cd.rel, cd.total) || 0, sinR = cd.pdvs.filter((r) => !r.n), conR = cd.pdvs.filter((r) => r.n);
+      const orden2 = (arr) => [...arr].sort((u, v) => u.nombre.localeCompare(v.nombre));
+      const fila = (r) => `<div class="dr-r" data-det="${esc(r.nombre)}" data-n="${esc(norm(r.nombre))}"><i class="dr-av ${r.n ? (r.pc === 100 ? 'ok' : r.pc === null ? 'mut' : 'bad') : 'mut'}">${esc(iniciales(r.nombre))}</i><div><b>${esc(r.nombre)}</b><small>${r.n ? `${r.n} góndola${r.n > 1 ? 's' : ''} auditada${r.n > 1 ? 's' : ''} · cumplen ${r.cc} de ${r.cc + r.pp + r.nn}` : 'Sin relevar'}</small></div></div>`;
+      const grupo = (tit, cls, ic, arr) => `<div class="dr-g"><div class="dr-gh"><i class="k-ico ${cls}">${svg(ic, 16)}</i><b>${tit}</b><span class="dr-n ${cls}">${arr.length}</span></div>${arr.length ? orden2(arr).map(fila).join('') : '<p class="dr-vacio">Ninguno.</p>'}</div>`;
+      const per2 = f.desde || f.hasta ? 'Período filtrado' : 'Todo el período';
+      return `<div class="dr-bg" data-cad=""></div><aside class="dr" role="dialog" aria-label="Puntos de venta de ${esc(cd.nombre)}">
+        <div class="dr-h"><div><small class="dr-eye">Estado por cadena</small><h2>${esc(cd.nombre)}</h2><p>${per2}</p></div><button type="button" class="dr-x" data-cad="" aria-label="Cerrar">×</button></div>
+        <div class="dr-big"><b class="${a >= 80 ? 'ok' : a >= 40 ? 'warn' : 'bad'}">${a}%</b><div><span>${cd.rel} de ${cd.total} puntos de venta relevados</span><div class="cr-bar"><i style="width:${a}%"></i></div></div></div>
+        <div class="dr-k"><div><b>${cd.total}</b><span>Puntos de venta</span></div><div><b class="ok">${cd.rel}</b><span>Relevados</span></div><div><b class="az">${cd.cc}</b><span>Góndolas que cumplen</span></div><div><b class="bad">${cd.tot - cd.cc}</b><span>No cumplen</span></div></div>
+        <div class="dr-s"><input type="search" id="dq" placeholder="Buscar punto de venta…" autocomplete="off"></div>
+        <div class="dr-b">${grupo('Sin relevar', 'bad', 'warn', sinR)}${grupo('Relevados', 'ok', 'ok', conR)}</div></aside>`;
+    };
+
     // ── Resumen: indicadores y estado por punto de venta (con filtro) ──
-    const secResumen = `<section><h1>Resumen</h1><p class="sub">Avance del relevamiento y resultados del período.</p>
+    const secResumen = `<section><h1>Resumen</h1><p class="sub">Avance del relevamiento y resultados del período.</p><div class="filt">${buscador}</div>
             <div class="k-grid k4">
               ${kpi('az', 'pin', 'Total de puntos de venta', pdvsVista.length, '', 'det')}
               ${kpi('ok', 'pin', 'Puntos de venta relevados', `${relevados} <small>de ${pdvsVista.length}</small>`, `<div class="k-bar"><b class="ok" style="width:${pctRuta || 0}%"></b></div>`, 'det')}
               ${kpi('az', 'foto', 'Espacios relevados', n, '', 'esp')}
-              ${kpi('warn', 'cumple', 'Respuestas favorables', pctResp === null ? '–' : pctResp + '%', `<div class="k-bar"><b class="ok" style="width:${pctResp || 0}%"></b></div>`, 'eval')}
-            </div><div class="k-nota">Avance: ${pctRuta === null ? '–' : pctRuta + '%'} de los puntos de venta ya relevados. Respuestas favorables: porcentaje sobre el total de respuestas dadas.${notasAdic.length ? ` Espacios encontrados fuera de lo contemplado en los acuerdos: ${notasAdic.length}.` : ''}</div></section>
+              ${kpi('warn', 'cumple', 'Cumplimiento', pctCumple === null ? '–' : pctCumple + '%', `<div class="k-bar"><b class="ok" style="width:${pctCumple || 0}%"></b></div>`, 'eval')}
+            </div><div class="k-nota">Avance: ${pctRuta === null ? '–' : pctRuta + '%'} de los puntos de venta ya relevados (${relevados} de ${pdvsVista.length}). Cumplimiento: ${conRes ? `${c} de ${conRes} góndolas auditadas cumplen` : 'aún no hay góndolas auditadas'}; los puntos de venta sin relevar no entran en este porcentaje.${notasAdic.length ? ` Espacios encontrados fuera de lo contemplado en los acuerdos: ${notasAdic.length}.` : ''}</div></section>
           <section class="panel" id="s-mar"><div class="p-head"><i class="k-ico warn">${svg('foto', 18)}</i><div><h2>Marcas con más relevamientos</h2><p>Cantidad de góndolas relevadas por marca en el período.</p></div></div>
             ${marcasR.length ? marcasR.map((z) => `<div class="mr-row"><span>${esc(z.m)}</span><div class="mr-t"><i style="width:${(z.n / marcasR[0].n) * 100}%"></i></div><b>${z.n}</b></div>`).join('') : '<div class="empty">Sin relevamientos</div>'}</section>
-          <section class="panel" id="s-cad"><div class="p-head"><i class="k-ico az">${svg('grid', 18)}</i><div><h2>Estado por cadena</h2><p>Toca una cadena para ver sus puntos de venta.</p></div></div>
-            <div class="cad-g">${filasCad.length ? filasCad.map((x) => `<button class="cad ${cadSel && cadSel.nombre === x.nombre ? 'on' : ''}" data-cad="${esc(x.nombre)}"><div class="cad-t"><b>${esc(x.nombre)}</b><span class="${tonoPct(x.pc)}">${x.pc === null ? '–' : x.pc + '%'}</span></div>
-              <div class="k-bar"><b class="${tonoPct(x.pc) === 'mut' ? '' : tonoPct(x.pc)}" style="width:${x.pc || 0}%"></b></div>
-              <small>${x.rel} de ${x.total} puntos de venta relevados · ${x.n} góndola${x.n === 1 ? '' : 's'}</small></button>`).join('') : '<div class="empty">Sin cadenas</div>'}</div></section>
-          ${cadSel ? `<section class="panel" id="s-pdv"><div class="p-head"><i class="k-ico ok">${svg('pin', 18)}</i><div><h2>${esc(cadSel.nombre)} · puntos de venta</h2><p>Toca un punto de venta para ver su detalle, fotos y evidencias.</p></div>
-              <div class="p-ctl"><button class="btn-o" data-cad="">Cerrar</button><div class="seg sm"><button class="seg-b ${orden === 'mayor' ? 'on' : ''}" data-o="mayor">Mayor ↓</button><button class="seg-b ${orden === 'menor' ? 'on' : ''}" data-o="menor">Menor ↑</button><button class="seg-b ${orden === 'az' ? 'on' : ''}" data-o="az">A–Z</button></div></div></div>
-            <div class="leyenda"><span><i class="ok"></i>Cumple</span><span><i class="bad"></i>No cumple</span><span><i class="mut"></i>Sin resultado</span></div>
-            ${cadSel.pdvs.map((r) => `<div class="pdv-row ir" data-det="${esc(r.nombre)}"><div class="pdv-n"><b>${esc(r.nombre)}</b><small>${r.n ? `${r.n} góndola${r.n > 1 ? 's' : ''} auditada${r.n > 1 ? 's' : ''}` : 'Sin relevar'}</small></div>
-              <div class="pdv-bar">${r.n ? seg('ok', r.cc, r.n) + seg('warn', r.pp, r.n) + seg('bad', r.nn, r.n) + seg('mut', r.ss, r.n) : ''}</div>
-              <div class="pdv-p ${tonoPct(r.pc)}">${r.pc === null ? '–' : r.pc + '%'}<small>${r.cc} de ${r.cc + r.pp + r.nn}</small></div></div>`).join('')}</section>` : ''}${secNotas}`;
+          <section class="panel" id="s-cad"><div class="p-head"><i class="k-ico az">${svg('grid', 18)}</i><div><h2>Estado por cadena</h2><p>Avance de relevamiento de cada cadena. Toca "Ver puntos de venta" para abrir su detalle.</p></div></div>
+            <div class="cr-list">${filasCad.length ? filasCad.map((x) => { const a = pct(x.rel, x.total) || 0; return `<div class="cr"><div class="cr-n"><b>${esc(x.nombre)}</b><button type="button" class="cr-ver" data-cad="${esc(x.nombre)}">Ver puntos de venta →</button></div>
+              <div class="cr-m"><div class="cr-bar"><i style="width:${a}%"></i></div><div class="cr-leg"><span><i class="ok"></i><b>${x.rel}</b> relevados</span><span><i class="pend"></i><b>${x.total - x.rel}</b> sin relevar</span><span class="mut">· total ${x.total}</span><span class="cr-p">${a}%</span></div></div></div>`; }).join('') : '<div class="empty">Sin cadenas</div>'}</div></section>
+          ${secNotas}${cadSel ? drawerCadena(cadSel) : ''}`;
 
     // ── Evaluación: análisis de góndolas + comparativa planograma vs foto ──
     const secEval = `<section><h1>Evaluación</h1><p class="sub">Análisis de góndolas y comparativa del planograma ideal con lo auditado.</p>${filtros}</section>
@@ -625,7 +735,8 @@
           <section class="panel" id="s-cmp"><div class="p-head"><i class="k-ico az">${svg('cmp', 18)}</i><div><h2>${tituloEval}</h2><p>Planograma ideal frente a cumplimiento en la foto auditada.</p></div></div>${cmp}</section>`;
 
     // ── Detalle de punto de venta: resultados, fotos y evidencias ──
-    const detNombre = state.det && pdvsAll.includes(state.det) ? state.det : (pdvsAll.find((q) => base.some((x) => x.pdv === q)) || pdvsAll[0] || '');
+    const pdvsDet = pdvsAll.filter((q) => !palabras.length || coincidePdv(q) || base.some((x) => x.pdv === q));
+    const detNombre = state.det && pdvsDet.includes(state.det) ? state.det : (pdvsDet.find((q) => base.some((x) => x.pdv === q)) || pdvsDet[0] || '');
     const detFotos = base.filter((x) => x.pdv === detNombre);
     const VD = agrupar(detFotos);
     const dc = cnt(VD, 'cumple'), dp = cnt(VD, 'parcial'), dn = cnt(VD, 'no_cumple'), dpc = pct(dc, dc + dp + dn);
@@ -636,7 +747,7 @@
         <div class="chips">${resp.map((q) => `<span class="chip ${q.o.tono === 'bad' ? 'red' : q.o.tono === 'warn' ? 'org' : 'grn'}"><b>${esc(q.q.corto)}:</b> ${esc(q.o.texto)}</span>`).join('')}</div></div>`;
     };
     const secDet = `<section><h1>Detalle de punto de venta</h1><p class="sub">Resultados, fotos y evidencias de cada visita.</p>
-            <div class="filt"><label class="f-sel"><span>Punto de venta</span><select id="detsel">${pdvsAll.map((q) => `<option ${q === detNombre ? 'selected' : ''}>${esc(q)}</option>`).join('')}</select></label></div>
+            <div class="filt">${buscador}<label class="f-sel"><span>Punto de venta</span><select id="detsel">${pdvsDet.map((q) => `<option ${q === detNombre ? 'selected' : ''}>${esc(q)}</option>`).join('')}</select></label></div>
             <div class="k-grid k4">
               ${kpi('az', 'foto', 'Relevamientos', VD.length)}
               ${kpi('ok', 'cumple', 'Cumplimiento', dpc === null ? '–' : dpc + '%', dpc === null ? '' : `<div class="k-bar"><b class="ok" style="width:${dpc}%"></b></div>`)}
@@ -648,7 +759,7 @@
             <div class="galeria">${VD.length ? VD.map((x) => `<button class="g-item" data-g="${esc(x.id)}">${x.fotos.length > 1 ? `<span class="n-fotos">${x.fotos.length} fotos</span>` : ''}<img src="${esc(x.fotos[0].thumb || x.fotos[0].url)}" loading="lazy" alt=""><div><b>${esc(x.marca || '')} · ${esc(x.tipo)}</b><small class="num">${fmtFecha(x.ts)}${x.fotos.some((p) => p.pendiente) ? ' · por subir' : ''}</small><div class="tags">${tags(x)}</div></div></button>`).join('') : '<div class="empty">Aún no hay fotos</div>'}</div></section>`;
 
     // ── Evidencias: fotos por local, marca y espacio ──
-    const filtrosEv = `<div class="filt">${select('pdv', 'Punto de venta', opt('pdv'))}${select('marca', 'Marca', opt('marca'))}${select('tipo', 'Tipo de espacio', C.TIPOS.map((t) => t.nombre))}
+    const filtrosEv = `<div class="filt">${buscador}${select('pdv', 'Punto de venta', opt('pdv'))}${select('marca', 'Marca', opt('marca'))}${select('tipo', 'Tipo de espacio', C.TIPOS.map((t) => t.nombre))}
               <label class="f-sel"><span>Desde</span><input type="date" data-f="desde" value="${f.desde}"></label><label class="f-sel"><span>Hasta</span><input type="date" data-f="hasta" value="${f.hasta}"></label></div>`;
     const secEv = `<section><h1>Evidencias</h1><p class="sub">Fotos relevadas. Filtrá por local, marca y espacio.</p>${filtrosEv}</section>
           <section class="panel" id="s-gal"><div class="p-head"><i class="k-ico mut">${svg('img', 18)}</i><div><h2>Fotos</h2><p>${V.length} relevamiento${V.length === 1 ? '' : 's'} · ${lista.length} foto${lista.length === 1 ? '' : 's'}. Toca uno para verlo junto a su planograma.</p></div></div>
@@ -658,7 +769,7 @@
     const espDe = C.TIPOS.map((t) => { const it = V.filter((v) => mismoTipo(v.tipo, t.nombre)); const rc = it.filter((v) => resDe(v)).length;
       return { t, n: it.length, pc: pct(cnt(it, 'cumple'), rc), marcas: C.MARCAS.map((m) => [m, it.filter((v) => v.marca === m).length]).filter((q) => q[1]) }; });
     const secEsp = `<section><h1>Espacios</h1><p class="sub">Cumplimiento por tipo de espacio y marcas relevadas en cada uno.</p>
-            <div class="filt">${select('pdv', 'Punto de venta', opt('pdv'))}${select('marca', 'Marca', opt('marca'))}</div></section>
+            <div class="filt">${buscador}${select('pdv', 'Punto de venta', opt('pdv'))}${select('marca', 'Marca', opt('marca'))}</div></section>
           <section class="panel"><div class="esp-g">${espDe.map((e) => `<div class="esp ${e.n ? '' : 'vacio'}"><div class="esp-h"><b>${esc(e.t.nombre)}</b><em class="${tonoPct(e.pc)}">${e.pc === null ? '–' : e.pc + '%'}</em></div>
               <small>${e.n} relevamiento${e.n === 1 ? '' : 's'}</small><div class="k-bar"><b class="ok" style="width:${e.pc || 0}%"></b></div>
               <div class="chips">${e.marcas.length ? e.marcas.map(([m, k]) => `<span class="chip gry">${esc(m)} · ${k}</span>`).join('') : '<span class="mut-t">Sin relevar</span>'}</div>
@@ -681,20 +792,36 @@
       f.hasta = b.dataset.p === 'hoy' ? hoy : '';
       pintarTablero();
     });
-    $app.querySelectorAll('[data-cad]').forEach((b) => b.onclick = () => { state.cadena = b.dataset.cad && state.cadena !== b.dataset.cad ? b.dataset.cad : ''; pintarTablero(); const s = document.getElementById(state.cadena ? 's-pdv' : 's-cad'); if (s) s.scrollIntoView({ block: 'nearest' }); });
+    $app.querySelectorAll('[data-cad]').forEach((b) => b.onclick = () => { state.cadena = b.dataset.cad && state.cadena !== b.dataset.cad ? b.dataset.cad : ''; pintarTablero(); });
+    const dq = document.getElementById('dq');
+    if (dq) dq.oninput = () => { const w = norm(dq.value).split(/\s+/).filter(Boolean); $app.querySelectorAll('.dr-r').forEach((r) => { r.hidden = !w.every((x) => r.dataset.n.includes(x)); }); };
+    if (!window.__escCad) { window.__escCad = true; document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.cadena) { state.cadena = ''; pintarTablero(); } }); }
     $app.querySelectorAll('[data-o]').forEach((b) => b.onclick = () => { state.orden = b.dataset.o; pintarTablero(); });
     document.getElementById('h-atras').onclick = () => history.back();
     document.getElementById('h-adel').onclick = () => history.forward();
     $app.querySelectorAll('[data-v]').forEach((b) => b.onclick = () => { if ((state.vista || 'resumen') !== b.dataset.v) navegar(() => { state.vista = b.dataset.v; }); });
-    $app.querySelectorAll('[data-det]').forEach((b) => b.onclick = () => navegar(() => { state.det = b.dataset.det; state.vista = 'det'; }));
+    $app.querySelectorAll('[data-det]').forEach((b) => b.onclick = () => navegar(() => { state.det = b.dataset.det; state.vista = 'det'; state.cadena = ''; }));
     $app.querySelectorAll('[data-esp]').forEach((b) => b.onclick = () => navegar(() => { f.tipo = b.dataset.esp; state.vista = 'ev'; }));
     const ds = document.getElementById('detsel'); if (ds) ds.onchange = () => { state.det = ds.value; pintarTablero(); };
     $app.querySelectorAll('[data-g]').forEach((b) => b.onclick = () => {
       const x = agrupar(todas).find((v) => v.fotos.some((p) => p.id === b.dataset.g)); if (!x) return;
       const refs = tipoDe(x.tipo) ? planosDe(x.pdv, x.marca, tipoDe(x.tipo).id) : [];
-      lightbox([...(refs[0] ? [{ url: refs[0].url, caption: 'Planograma ideal' }] : []), ...x.fotos.map((p, i) => ({ url: p.url, caption: `Foto auditada${x.fotos.length > 1 ? ` ${i + 1} de ${x.fotos.length}` : ''} · ${fmtFecha(p.ts)}`, tags: i === 0 ? tags(x) : '' }))]);
+      lightbox([...(refs[0] ? [{ url: refs[0].url, caption: 'Planograma ideal' }] : []), ...x.fotos.map((p, i) => ({ url: p.url, caption: `Foto auditada${x.fotos.length > 1 ? ` ${i + 1} de ${x.fotos.length}` : ''} · ${fmtFecha(p.ts)}`, tags: i === 0 ? tags(x) : '' }))], '', true);
     });
-    $app.querySelectorAll('[data-z]').forEach((im) => im.onclick = () => lightbox([{ url: im.dataset.z }]));
+    $app.querySelectorAll('[data-z]').forEach((im) => im.onclick = () => lightbox([{ url: im.dataset.z }], '', true));
+    // Giro en la comparativa (el cliente gira cada foto a su conveniencia; se recuerda en este navegador).
+    $app.querySelectorAll('.cmp-f img').forEach((im) => rotAplicar(im, rotLeer(im.dataset.z)));
+    $app.querySelectorAll('.cmp-f [data-rot]').forEach((b) => b.onclick = (e) => {
+      e.stopPropagation();
+      const im = b.closest('.cmp-f').querySelector('img'), url = im.dataset.z;
+      const d = (((rotLeer(url) + +b.dataset.rot) % 360) + 360) % 360; rotGuardar(url, d); rotAplicar(im, d);
+    });
+    // Buscador de texto: se vuelve a pintar al escribir y se conserva el cursor.
+    const bq = document.getElementById('bq');
+    if (bq) {
+      bq.oninput = () => { f.q = bq.value; pintarTablero(); };
+      if (enfoque >= 0) { bq.focus(); bq.setSelectionRange(enfoque, enfoque); }
+    }
     const sf = document.getElementById('selfoto'); if (sf) sf.onchange = () => { state.sel = sf.value; pintarTablero(); };
     const ir = (d) => { state.sel = V[idx + d].id; pintarTablero(); };
     $app.querySelectorAll('[data-car]').forEach((box) => {
@@ -703,6 +830,8 @@
         e.stopPropagation();
         i = (i + +bt.dataset.d + urls.length) % urls.length;
         const im = box.querySelector('img'); im.src = urls[i]; im.dataset.z = urls[i];
+        const rb = box.querySelector('.rot'); if (rb) rb.dataset.url = urls[i];
+        rotAplicar(im, rotLeer(urls[i]));
         box.querySelectorAll('.car-d i').forEach((d, k) => d.classList.toggle('on', k === i));
       });
     });
@@ -797,8 +926,9 @@
       const cam = document.querySelector('.cam'), modal = document.querySelector('.modal');
       if (cam) cam.querySelector('[data-cerrar]').click();   // pide confirmacion si hay fotos
       else if (modal) modal.querySelector('[data-x]')?.click();
-      else if (paso === 'criterios') { if (confirm('Se perderá el relevamiento en curso (fotos y respuestas). ¿Salir?')) { state.fotos.forEach((f) => URL.revokeObjectURL(f.url)); state.fotos = []; ir('tipos'); } }
-      else if (paso === 'tipos') ir('marca');
+      else if (paso === 'criterios') confirmarAbandono(descartarRelevamiento);
+      else if (paso === 'tipos') ir(state.hayColab ? 'colab' : 'marca');
+      else if (paso === 'colab') ir('marca');
       else if (paso === 'marca') ir('pdv');
       else { history.back(); return; }   // en el inicio si se sale de verdad
       history.pushState({ campo: 1 }, '');
