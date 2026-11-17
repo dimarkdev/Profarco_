@@ -18,7 +18,7 @@
   // Primero lo que corresponde al punto de venta; el resto (opaco) va despues, sin cambiar su orden.
   const primeroLosDelPunto = (arr, esDelPunto) => arr.map((x, i) => [x, i]).sort((a, b) => (esDelPunto(b[0]) - esDelPunto(a[0])) || (a[1] - b[1])).map((p) => p[0]);
   const tiposEsperados = (pdv, marca) => C.TIPOS.filter((t) => esperado(pdv, marca, t));
-  const criterioDe = (id) => C.CRITERIOS.find((c) => c.id === id) || { id, texto: id };
+  const criterioDe = (id) => C.CRITERIOS.find((c) => c.id === id) || (/^colab:/.test(id) ? { id, texto: 'Colaboración: ' + id.slice(6), tono: 'ok' } : { id, texto: id });
   const guardado = (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
   const ICON_BACK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>';
   const ICON_IMG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 9"/></svg>';
@@ -62,9 +62,9 @@
     const pintar = () => {
       const i = items[k], n = items.length;
       el.innerHTML = `<div class="lb-head"><span class="t">${n > 1 ? `${k + 1} / ${n} · ` : ''}Toca la imagen para acercar${girar ? ' · usa ⟲ ⟳ para girarla' : ''}</span><button class="lb-x" data-x aria-label="Cerrar">×</button></div>
-        <div class="lb-body"><figure><img src="${esc(i.url)}" alt="">${girar ? BTN_GIRO(i.url) : ''}${i.caption ? `<div>${esc(i.caption)}</div>` : ''}${i.tags ? `<div class="lb-tags">${i.tags}</div>` : ''}</figure></div>
+        <div class="lb-body"><figure><img src="${esc(i.url)}" alt="">${girar && !i.fijo ? BTN_GIRO(i.url) : ''}${i.caption ? `<div>${esc(i.caption)}</div>` : ''}${i.tags ? `<div class="lb-tags">${i.tags}</div>` : ''}</figure></div>
         ${n > 1 ? '<button class="lb-n l" data-n="-1" aria-label="Anterior">‹</button><button class="lb-n r" data-n="1" aria-label="Siguiente">›</button>' : ''}`;
-      if (girar) rotAplicar(el.querySelector('img'), rotLeer(i.url));
+      if (girar && !i.fijo) rotAplicar(el.querySelector('img'), rotLeer(i.url));
     };
     const ir = (d) => { if (items.length > 1) { k = (k + d + items.length) % items.length; pintar(); } };
     function tecla(e) { if (e.key === 'ArrowRight') ir(1); else if (e.key === 'ArrowLeft') ir(-1); else if (e.key === 'Escape') cerrar(); }
@@ -74,12 +74,12 @@
       const b = e.target.closest('[data-n]');
       if (b) { ir(+b.dataset.n); return; }
       if (e.target.closest('[data-x]')) cerrar();
-      else if (e.target.tagName === 'IMG') { el.classList.toggle('zoom'); if (girar) rotAplicar(el.querySelector('img'), rotLeer(items[k].url)); }
+      else if (e.target.tagName === 'IMG') { el.classList.toggle('zoom'); if (girar && !items[k].fijo) rotAplicar(el.querySelector('img'), rotLeer(items[k].url)); }
     });
     document.addEventListener('keydown', tecla);
     pintar();
     document.body.appendChild(el);
-    if (girar) rotAplicar(el.querySelector('img'), rotLeer(items[k].url));
+    if (girar && !items[k].fijo) rotAplicar(el.querySelector('img'), rotLeer(items[k].url));
   }
 
   // Progreso de la visita (punto de venta, espacios ya relevados y justificaciones): se guarda en el telefono para retomarlo del mismo dia.
@@ -99,6 +99,7 @@
   const state = {
     planos: [], pdvs: [],
     usuario: guardado('usuario'),          // {ci, nombre, pdvs: [los puntos de venta de ese CI]}
+    ciudadesAbiertas: new Set(),           // ciudades desplegadas en la lista de puntos de venta
     pdv: '', marca: '', hechos: new Set(),  // 'marca|tipo' ya relevados en esta visita
     tipo: null,
     fotos: [],                             // [{blob, url}] tomadas en la camara, sin guardar
@@ -206,14 +207,23 @@
     const vis = visitados();
     const cuando = (d) => d === hoy() ? 'Visitado hoy' : 'Visitado el ' + d.slice(8, 10) + '/' + d.slice(5, 7);
     const lista = (state.usuario.pdvs || []).filter((p) => !q || (p.nombre + ' ' + (p.cadena || '') + ' ' + (p.ciudad || '')).toLowerCase().includes(q));
+    // Primero las ciudades; al tocar una se despliegan sus sucursales (con una sola ciudad o al buscar, ya vienen abiertas).
+    const SIN = 'Sin ciudad', grupos = new Map();
+    lista.forEach((p) => { const c = String(p.ciudad || '').trim() || SIN; if (!grupos.has(c)) grupos.set(c, []); grupos.get(c).push(p); });
+    const ciudades = [...grupos.keys()].sort((a, b) => a === SIN ? 1 : b === SIN ? -1 : a.localeCompare(b, 'es'));
+    const abierta = (c) => !!q || ciudades.length === 1 || state.ciudadesAbiertas.has(c);
+    const item = (p) => `<button class="pdv-item ${vis[p.nombre] ? 'visitado' : ''}" data-n="${esc(p.nombre)}" data-ci="${esc(String(p.ciudad || '').trim() || SIN)}">${esc(p.nombre)}${p.cadena ? `<small>${esc(p.cadena)}</small>` : ''}${vis[p.nombre] ? `<i class="chk">✓</i><em class="cuando">${cuando(vis[p.nombre])}</em>` : ''}</button>`;
+    const ciudadHtml = (c) => { const ps = grupos.get(c), nv = ps.filter((p) => vis[p.nombre]).length, ab = abierta(c);
+      return `<div class="ciudad ${ab ? 'abierta' : ''}"><button type="button" class="ciudad-h" data-c="${esc(c)}" aria-expanded="${ab}"><span><b>${esc(c)}</b><small>${ps.length} punto${ps.length === 1 ? '' : 's'} de venta${nv ? ` · ${nv} visitado${nv === 1 ? '' : 's'}` : ''}</small></span><i class="chev">›</i></button>${ab ? `<div class="pdv-list">${ps.map(item).join('')}</div>` : ''}</div>`; };
     $app.innerHTML = `<div class="wrap"><h1>Punto de venta</h1><p class="lead">Hola, ${esc(state.usuario.nombre)}</p>
       <input class="in" id="q" style="margin-top:22px" placeholder="Buscar punto de venta…" value="${esc(state.filtroPdv)}" autocomplete="off">
-      <div class="pdv-list">${lista.length ? lista.map((p) => `<button class="pdv-item ${vis[p.nombre] ? 'visitado' : ''}" data-n="${esc(p.nombre)}">${esc(p.nombre)}<small>${esc([p.cadena, p.ciudad].filter(Boolean).join(' · '))}</small>${vis[p.nombre] ? `<i class="chk">✓</i><em class="cuando">${cuando(vis[p.nombre])}</em>` : ''}</button>`).join('')
+      <div class="ciudades">${lista.length ? ciudades.map(ciudadHtml).join('')
         : '<div class="empty">No tienes puntos de venta asignados.<br>Reporta con soporte.</div>'}</div>
       <p style="text-align:center;margin-top:24px"><button class="link" id="otro">No soy ${esc(state.usuario.nombre)}</button></p></div>`;
     const q$ = document.getElementById('q');
     q$.oninput = () => { state.filtroPdv = q$.value; const p = q$.selectionStart; pasoPdv(); const n = document.getElementById('q'); n.focus(); n.setSelectionRange(p, p); };
-    $app.querySelectorAll('[data-n]').forEach((b) => b.onclick = () => { state.pdv = b.dataset.n; if (!retomarVisita(state.pdv)) { state.hechos = new Set(); state.extras = {}; } state.marca = ''; guardarVisita(); ir('marca'); });
+    $app.querySelectorAll('.ciudad-h').forEach((b) => b.onclick = () => { const c = b.dataset.c; if (state.ciudadesAbiertas.has(c)) state.ciudadesAbiertas.delete(c); else state.ciudadesAbiertas.add(c); pasoPdv(); });
+    $app.querySelectorAll('[data-n]').forEach((b) => b.onclick = () => { state.ciudadesAbiertas.add(b.dataset.ci); state.pdv = b.dataset.n; if (!retomarVisita(state.pdv)) { state.hechos = new Set(); state.extras = {}; } state.marca = ''; guardarVisita(); ir('marca'); });
     document.getElementById('otro').onclick = () => { localStorage.removeItem('usuario'); state.usuario = null; ir('ci'); };
   }
 
@@ -225,10 +235,13 @@
   }
 
   function pasoMarca() {
-    const hecha = (m) => [...state.hechos].some((h) => h.startsWith(m + '|'));
+    const nHechos = (m) => [...state.hechos].filter((h) => h.startsWith(m + '|')).length;
+    const hecha = (m) => nHechos(m) > 0;
+    // Check de la marca: "Relevado" si ya se hicieron todos los espacios contemplados; "1 de 2" si faltan.
+    const checkMarca = (m) => { const n = nHechos(m), tot = esperadosDe(state.pdv) ? tiposDeMarca(m).filter((t) => esperado(state.pdv, m, t)).length : 0; return n ? `<span class="hecho-m">✓ ${tot && n < tot ? `${n} de ${tot}` : 'Relevado'}</span>` : ''; };
     $app.innerHTML = `<div class="wrap"><h1>Marca</h1><p class="lead">¿Qué marca vas a relevar?</p>
       <div class="row" style="margin-top:22px"><button class="back" id="atras" aria-label="Volver">${ICON_BACK}</button><div class="sede">${esc(state.pdv)}</div></div>
-      <div class="marcas">${primeroLosDelPunto(C.MARCAS, (m) => marcaDelPunto(state.pdv, m) || !esperadosDe(state.pdv)).map((m) => `<button class="marca-b ${hecha(m) ? 'hecha' : ''} ${marcaDelPunto(state.pdv, m) ? 'asignada' : ''}" data-m="${esc(m)}">${esc(m)}${hecha(m) ? '<i>✓</i>' : ''}</button>`).join('')}</div>
+      <div class="marcas">${primeroLosDelPunto(C.MARCAS, (m) => marcaDelPunto(state.pdv, m) || !esperadosDe(state.pdv)).map((m) => `<button class="marca-b ${hecha(m) ? 'hecha' : ''} ${marcaDelPunto(state.pdv, m) ? 'asignada' : ''}" data-m="${esc(m)}">${esc(m)}${checkMarca(m)}</button>`).join('')}</div>
       ${esperadosDe(state.pdv) ? '<p class="leyenda"><i class="pto"></i><span>Marca contemplada en este punto de venta</span></p>' : ''}
       ${state.hechos.size ? '<button class="btn primary block" id="fin" style="margin-top:22px">Finalizar visita</button>' : ''}</div>`;
     document.getElementById('atras').onclick = () => ir('pdv');
@@ -328,7 +341,7 @@
       m.querySelector('.ref img')?.addEventListener('click', () => lightbox([{ url: ps[i].url }]));
       m.querySelectorAll('[data-n]').forEach((b) => b.onclick = () => { i = (i + +b.dataset.n + ps.length) % ps.length; pintar(); });
       m.querySelectorAll('[data-v]').forEach((b) => b.onclick = () => { vi = +b.dataset.v; ps = vars[vi].planos; i = 0; vistas = new Set([0]); pintar(); });
-      m.querySelector('[data-go]').onclick = () => { cerrarRef(); abrirCamara(false); };
+      m.querySelector('[data-go]').onclick = () => { state.variante = vars[vi] && vars[vi].marcas.length > 1 ? vars[vi].etiqueta : ''; cerrarRef(); abrirCamara(false); };
     };
     pintar();
     document.body.appendChild(m);
@@ -445,7 +458,7 @@
       e.target.disabled = true; e.target.textContent = 'Guardando…';
       try {
         const n = state.fotos.length, ids = [...sel];
-        await S.guardarFotos({ pdv: state.pdv, marca: state.marca, tipo: state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, criterios: [...ids, C.resultado(ids)] }, state.fotos.map((f) => f.blob));
+        await S.guardarFotos({ pdv: state.pdv, marca: state.marca, tipo: state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, criterios: [...ids, C.resultado(ids), ...(state.variante ? ['colab:' + state.variante] : [])] }, state.fotos.map((f) => f.blob));
         const just = (state.extras || {})[state.marca + '|' + state.tipo.id];
         if (just) await S.guardarNota({ pdv: state.pdv, marca: state.marca, tipo: 'Adicional: ' + state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, texto: just });
         state.fotos.forEach((f) => URL.revokeObjectURL(f.url));
@@ -595,6 +608,7 @@
       out: '<path d="M10 5H6.5A1.5 1.5 0 005 6.5v11A1.5 1.5 0 006.5 19H10M15 8l4 4-4 4M19 12H9"/>',
     }[n] || '');
     const svg = (n, s = 20) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ico(n)}</svg>`;
+    const colDe = (v) => { const c = (v.criterios || []).find((id) => /^colab:/.test(id)); return c ? c.slice(6) : ''; };
     const tags = (x) => (x.criterios || []).map((id) => { const c = criterioDe(id); return `<span class="badge ${c.tono || ''}">${esc(c.texto)}</span>`; }).join('');
 
     // ── Indicadores ──
@@ -659,8 +673,8 @@
       const resumen = `${sel.marca ? sel.marca + ' · ' : ''}${sel.tipo} en ${sel.pdv}: ${r ? criterioDe(r).texto.toLowerCase() : 'sin resultado registrado'}. ` +
         (neg.length ? `Observaciones: ${neg.map((x) => x.q.corto.toLowerCase() + ' (' + x.o.texto.toLowerCase() + ')').join('; ')}.` : 'Todas las respuestas fueron favorables.');
       // Si hay mas de una imagen, al pasar el mouse aparece un degradado suave en los costados para cambiar de imagen.
-      const carro = (key, urls, alt, vacio, i0) => (urls.length
-        ? `<div class="cmp-f car" data-car="${key}"><img src="${esc(urls[i0])}" alt="${alt}" data-z="${esc(urls[i0])}">${BTN_GIRO(urls[i0])}${urls.length > 1
+      const carro = (key, urls, alt, vacio, i0, girar) => (urls.length
+        ? `<div class="cmp-f car" data-car="${key}"><img src="${esc(urls[i0])}" alt="${alt}" data-z="${esc(urls[i0])}">${girar ? BTN_GIRO(urls[i0]) : ''}${urls.length > 1
           ? `<button class="car-e l" data-d="-1" aria-label="Anterior">‹</button><button class="car-e r" data-d="1" aria-label="Siguiente">›</button><div class="car-d">${urls.map((_, k) => `<i class="${k === i0 ? 'on' : ''}"></i>`).join('')}</div>` : ''}</div>`
         : `<div class="cmp-f"><div class="cmp-vacio">${vacio}</div></div>`);
       const nF = sel.fotos.length;
@@ -670,11 +684,11 @@
         <div class="cmp">
           <div class="cmp-c"><div class="cmp-l">Planograma ideal</div>${carro('ref', carData.ref, 'Planograma ideal', 'Sin planograma de referencia para esta zona', 0)}<small>${esc(sel.marca || '')} · ${esc(sel.tipo)} · ${refs[0] && refs[0].pdv !== '*' ? esc(refs[0].pdv) : 'Planograma general'}${refs.length > 1 ? ` · ${refs.length} imágenes` : ''}</small></div>
           <div class="cmp-arrow" aria-hidden="true"><span class="line"></span><i>→</i><span class="line"></span></div>
-          <div class="cmp-c"><div class="cmp-l">Foto auditada</div>${carro('foto', carData.foto, 'Foto auditada', 'Sin imagen', ini)}<small>${esc(sel.pdv)} · ${fmtFecha(sel.ts)}${nF > 1 ? ` · ${nF} fotos` : ''}</small></div>
+          <div class="cmp-c"><div class="cmp-l">Foto auditada</div>${carro('foto', carData.foto, 'Foto auditada', 'Sin imagen', ini, true)}<small>${esc(sel.pdv)} · ${fmtFecha(sel.ts)}${nF > 1 ? ` · ${nF} fotos` : ''}</small></div>
         </div>
         <div class="cmp-t"><span>Análisis de cumplimiento</span></div>
         <div class="an">
-          <div class="an-a"><div class="an-l">Resultado de visita</div>${resChip}</div>
+          <div class="an-a"><div class="an-l">Resultado de visita</div>${resChip}${colDe(sel) ? `<span class="chip gry">Colaboración: ${esc(colDe(sel))}</span>` : ''}</div>
           <div class="an-b"><div class="an-l">Hallazgos detectados</div><div class="chips">${resp.map(chipResp).join('')}</div></div>
           <div class="an-c"><div class="an-l">Resumen del relevamiento</div><div class="an-box">${esc(resumen)}</div></div>
         </div>`;
@@ -775,15 +789,34 @@
               <div class="chips">${e.marcas.length ? e.marcas.map(([m, k]) => `<span class="chip gry">${esc(m)} · ${k}</span>`).join('') : '<span class="mut-t">Sin relevar</span>'}</div>
               ${e.n ? `<button class="btn-o" data-esp="${esc(e.t.nombre)}">Ver evidencias</button>` : ''}</div>`).join('')}</div></section>`;
 
+    // ── Colaboraciones: espacios que comparten dos o mas marcas (planograma ideal y relevamientos hechos con esa variante) ──
+    const colPlanos = new Map();
+    state.planos.forEach((p) => { const vp = variantePlano(p); if (vp.marcas.length < 2) return;
+      if (!colPlanos.has(vp.etiqueta)) colPlanos.set(vp.etiqueta, { tipos: new Set(), planos: [] });
+      const g = colPlanos.get(vp.etiqueta); g.tipos.add(p.tipo); if (!g.planos.some((q) => q.nombre === p.nombre)) g.planos.push(p); });
+    const colV = V.filter((v) => colDe(v));
+    const colGrupos = [...new Set([...colPlanos.keys(), ...colV.map(colDe)])].sort((a, b) => a.localeCompare(b)).map((e) => {
+      const it = colV.filter((v) => colDe(v) === e);
+      return { e, it, pc: pct(cnt(it, 'cumple'), it.filter((v) => resDe(v)).length), g: colPlanos.get(e) };
+    });
+    const colPc = pct(cnt(colV, 'cumple'), colV.filter((v) => resDe(v)).length);
+    const panelCol = (x) => `<section class="panel"><div class="p-head"><i class="k-ico az">${svg('cmp', 18)}</i><div><h2>${esc(x.e)}</h2><p>${x.it.length} relevamiento${x.it.length === 1 ? '' : 's'}${x.pc === null ? '' : ' · ' + x.pc + '% cumple'}${x.g ? ' · ' + [...x.g.tipos].map(esc).join(', ') : ''}</p></div></div>
+        ${x.g ? `<div class="col-pl">${x.g.planos.map((p) => `<button type="button" class="col-img" data-colimg="${esc(p.url)}"><img src="${esc(p.url)}" alt="Planograma ideal ${esc(x.e)}" loading="lazy"><small>Planograma ideal</small></button>`).join('')}</div>` : ''}
+        ${x.it.length ? x.it.map((v) => `<div class="pdv-row ir" data-g="${esc(v.id)}"><div class="pdv-n"><b>${esc(v.pdv)}</b><small>${esc(v.marca || '')} · ${esc(v.tipo)} · ${fmtFecha(v.ts)}</small></div><div class="pdv-p ${resDe(v) === 'cumple' ? 'ok' : resDe(v) ? 'bad' : 'mut'}">${resDe(v) ? esc(criterioDe(resDe(v)).texto) : '–'}</div></div>`).join('') : '<div class="empty">Todavía no hay relevamientos de esta colaboración.</div>'}</section>`;
+    const secCol = `<section><h1>Colaboraciones</h1><p class="sub">Espacios que comparten dos o más marcas (por ejemplo Bauducco + Fini): planograma ideal y relevamientos hechos con esa colaboración.</p>
+            <div class="filt">${buscador}${select('pdv', 'Punto de venta', opt('pdv'))}${select('marca', 'Marca', opt('marca'))}</div>
+            <div class="k-grid k4">${kpi('az', 'cmp', 'Colaboraciones', colGrupos.length)}${kpi('ok', 'foto', 'Relevamientos', colV.length)}${kpi('ok', 'cumple', 'Cumplimiento', colPc === null ? '–' : colPc + '%', colPc === null ? '' : `<div class="k-bar"><b class="ok" style="width:${colPc}%"></b></div>`)}</div></section>
+          ${colGrupos.length ? colGrupos.map(panelCol).join('') : '<section class="panel"><div class="empty">Todavía no hay planogramas de colaboración cargados.</div></section>'}`;
+
     $app.innerHTML = `<div class="dash-app">
       <aside class="side"><div class="side-brand"><img src="img/logo-masmarka.png" alt="+MARKA"><small>Tablero operativo</small></div>
-        <div class="side-sec">Principal</div>${nav('resumen', 'grid', 'Resumen')}${nav('eval', 'cmp', 'Evaluación')}${nav('esp', 'grid', 'Espacios')}${nav('ev', 'img', 'Evidencias')}${nav('det', 'pin', 'Detalle de punto de venta')}
+        <div class="side-sec">Principal</div>${nav('resumen', 'grid', 'Resumen')}${nav('eval', 'cmp', 'Evaluación')}${nav('esp', 'grid', 'Espacios')}${nav('col', 'cmp', 'Colaboraciones')}${nav('ev', 'img', 'Evidencias')}${nav('det', 'pin', 'Detalle de punto de venta')}
         <div class="side-pie"><div class="side-user"><i class="pf"><img src="img/icono-profarco.png" alt="Profarco"></i><div><b>Profarco S.A.</b><small>Vista de cliente</small></div></div><button class="nav-b" id="salir">${svg('out', 19)}<span>Cerrar sesión</span></button></div></aside>
       <div class="main">
         <header class="bar"><div class="bar-l"><button class="h-b" id="h-atras" aria-label="Volver" title="Volver" ${hist.n > 0 ? '' : 'disabled'}>←</button><button class="h-b" id="h-adel" aria-label="Avanzar" title="Avanzar" ${hist.n < hist.max ? '' : 'disabled'}>→</button><div class="crumb">Profarco <span>/</span> Principal <span>/</span> <b>${vista === 'eval' ? 'Evaluación' : vista === 'esp' ? 'Espacios' : vista === 'ev' ? 'Evidencias' : vista === 'det' ? 'Detalle de punto de venta' : 'Resumen'}</b></div></div>
           <div class="bar-r"><div class="seg">${per('hoy', 'Hoy')}${per('mes', 'Este mes')}${per('todo', 'Todo')}</div>
 </div></header>
-        <div class="content">${vista === 'eval' ? secEval : vista === 'esp' ? secEsp : vista === 'ev' ? secEv : vista === 'det' ? secDet : secResumen}</div></div></div>`;
+        <div class="content">${vista === 'eval' ? secEval : vista === 'esp' ? secEsp : vista === 'col' ? secCol : vista === 'ev' ? secEv : vista === 'det' ? secDet : secResumen}</div></div></div>`;
 
     $app.querySelectorAll('[data-f]').forEach((el) => el.onchange = () => { f[el.dataset.f] = el.value; if (el.dataset.f === 'desde' || el.dataset.f === 'hasta') state.periodo = ''; pintarTablero(); });
     $app.querySelectorAll('[data-p]').forEach((b) => b.onclick = () => {
@@ -806,11 +839,12 @@
     $app.querySelectorAll('[data-g]').forEach((b) => b.onclick = () => {
       const x = agrupar(todas).find((v) => v.fotos.some((p) => p.id === b.dataset.g)); if (!x) return;
       const refs = tipoDe(x.tipo) ? planosDe(x.pdv, x.marca, tipoDe(x.tipo).id) : [];
-      lightbox([...(refs[0] ? [{ url: refs[0].url, caption: 'Planograma ideal' }] : []), ...x.fotos.map((p, i) => ({ url: p.url, caption: `Foto auditada${x.fotos.length > 1 ? ` ${i + 1} de ${x.fotos.length}` : ''} · ${fmtFecha(p.ts)}`, tags: i === 0 ? tags(x) : '' }))], '', true);
+      lightbox([...(refs[0] ? [{ url: refs[0].url, caption: 'Planograma ideal', fijo: true }] : []), ...x.fotos.map((p, i) => ({ url: p.url, caption: `Foto auditada${x.fotos.length > 1 ? ` ${i + 1} de ${x.fotos.length}` : ''} · ${fmtFecha(p.ts)}`, tags: i === 0 ? tags(x) : '' }))], '', true);
     });
-    $app.querySelectorAll('[data-z]').forEach((im) => im.onclick = () => lightbox([{ url: im.dataset.z }], '', true));
+    $app.querySelectorAll('[data-colimg]').forEach((b) => b.onclick = () => lightbox([{ url: b.dataset.colimg, fijo: true }]));
+    $app.querySelectorAll('[data-z]').forEach((im) => im.onclick = () => lightbox([{ url: im.dataset.z, fijo: !im.closest('.cmp-f').querySelector('.rot') }], '', true));
     // Giro en la comparativa (el cliente gira cada foto a su conveniencia; se recuerda en este navegador).
-    $app.querySelectorAll('.cmp-f img').forEach((im) => rotAplicar(im, rotLeer(im.dataset.z)));
+    $app.querySelectorAll('.cmp-f').forEach((b) => { const im = b.querySelector('img'); if (im && b.querySelector('.rot')) rotAplicar(im, rotLeer(im.dataset.z)); });
     $app.querySelectorAll('.cmp-f [data-rot]').forEach((b) => b.onclick = (e) => {
       e.stopPropagation();
       const im = b.closest('.cmp-f').querySelector('img'), url = im.dataset.z;
@@ -831,7 +865,7 @@
         i = (i + +bt.dataset.d + urls.length) % urls.length;
         const im = box.querySelector('img'); im.src = urls[i]; im.dataset.z = urls[i];
         const rb = box.querySelector('.rot'); if (rb) rb.dataset.url = urls[i];
-        rotAplicar(im, rotLeer(urls[i]));
+        if (rb) rotAplicar(im, rotLeer(urls[i]));
         box.querySelectorAll('.car-d i').forEach((d, k) => d.classList.toggle('on', k === i));
       });
     });

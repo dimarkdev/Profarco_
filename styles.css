@@ -638,3 +638,23 @@ button.k-link:focus-visible { outline: 2px solid #3cb3a8; outline-offset: 2px; }
 .var-b.on { background: #0f6e91; border-color: #0f6e91; color: #fff; }
 .marca-b.colab { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 64px; }
 .marca-b.colab small { font-weight: 400; font-size: 11.5px; color: var(--text-2, #6b7a77); }
+
+/* Colaboraciones */
+.col-pl { display: flex; gap: 12px; overflow-x: auto; margin: 10px 0 14px; padding-bottom: 4px; }
+.col-img { flex: 0 0 auto; border: 1px solid #e2e8e6; border-radius: 12px; background: #fff; padding: 6px; cursor: zoom-in; text-align: center; }
+.col-img img { display: block; height: 150px; width: auto; border-radius: 8px; }
+.col-img small { display: block; margin-top: 4px; color: #6b7a77; font-size: 11px; }
+
+/* Check de marca ya relevada (igual al de los espacios) */
+.marca-b .hecho-m { position: absolute; top: 6px; right: 8px; display: inline-flex; align-items: center; gap: 3px; padding: 2px 9px; border-radius: 999px; background: #22a447; color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .2px; }
+.marca-b.hecha { border-color: #22a447; background: #c4ecd2; }
+
+/* Lista de puntos de venta por ciudad */
+.ciudades { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.ciudad-h { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r-md); padding: 14px 16px; font-size: 15px; }
+.ciudad-h b { display: block; font-weight: 700; }
+.ciudad-h small { display: block; font-weight: 400; color: var(--text-2); }
+.ciudad-h .chev { font-style: normal; font-size: 22px; line-height: 1; color: #6b7a77; transition: transform .2s; }
+.ciudad.abierta > .ciudad-h { border-color: #22a447; }
+.ciudad.abierta > .ciudad-h .chev { transform: rotate(90deg); }
+.ciudad > .pdv-list { margin: 8px 0 4px 10px; padding-left: 10px; border-left: 3px solid #d7efdf; }

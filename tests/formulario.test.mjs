@@ -80,7 +80,9 @@ async function nuevo(opts = {}) {
 async function entrar(page, ci = '1111111') {
   await page.goto(BASE + '/index.html');
   await page.fill('#ci', ci); await page.click('#seguir');
-  await page.click('#si'); await page.waitForSelector('.pdv-item');
+  await page.click('#si'); await page.waitForSelector('.ciudad-h');
+  while (await page.$('.ciudad:not(.abierta) .ciudad-h')) await page.click('.ciudad:not(.abierta) .ciudad-h');   // despliega las ciudades
+  await page.waitForSelector('.pdv-item');
 }
 async function irA(page, pdv, marca, tipoId) {
   await page.click(`.pdv-item[data-n="${pdv}"]`);
@@ -129,6 +131,23 @@ test('CI valido pide confirmar el nombre; "No soy yo" vuelve al ingreso', async 
     await t.page.click('#no'); await t.page.waitForSelector('#seguir');
   } finally { await t.cerrar(); }
 });
+test('Puntos de venta: primero las ciudades y al tocar una se despliegan sus sucursales', async () => {
+  const t = await nuevo(); try {
+    await t.page.goto(BASE + '/index.html');
+    await t.page.fill('#ci', '1111111'); await t.page.click('#seguir'); await t.page.click('#si');
+    await t.page.waitForSelector('.ciudad-h');
+    assert.deepEqual(await t.page.$$eval('.ciudad-h b', (e) => e.map((x) => x.textContent)), ['ASUNCIÓN', 'LUQUE'], 'ciudades en orden alfabetico');
+    assert.equal(await t.page.$('.pdv-item'), null, 'las sucursales no se ven hasta abrir la ciudad');
+    await t.page.click('.ciudad-h[data-c="LUQUE"]');
+    assert.deepEqual(await t.page.$$eval('.pdv-item', (e) => e.map((x) => x.dataset.n)), ['PDV Dos']);
+    await t.page.click('.ciudad-h[data-c="ASUNCIÓN"]');
+    assert.equal((await t.page.$$('.pdv-item')).length, 2);
+    await t.page.click('.ciudad-h[data-c="LUQUE"]');   // se vuelve a cerrar
+    assert.deepEqual(await t.page.$$eval('.pdv-item', (e) => e.map((x) => x.dataset.n)), ['PDV Uno']);
+    await t.page.fill('#q', 'dos');   // al buscar, las ciudades con resultados se abren solas
+    await esperar(async () => (await t.page.$$eval('.pdv-item', (e) => e.map((x) => x.dataset.n))).join() === 'PDV Dos', 3000, 'busqueda abre la ciudad');
+  } finally { await t.cerrar(); }
+});
 test('Muestra solo los puntos de venta del relevador y se pueden buscar', async () => {
   const t = await nuevo(); try {
     await entrar(t.page);
@@ -141,7 +160,7 @@ test('Muestra solo los puntos de venta del relevador y se pueden buscar', async 
 test('La sesion se conserva al recargar la pagina', async () => {
   const t = await nuevo(); try {
     await entrar(t.page); await t.page.reload();
-    await t.page.waitForSelector('.pdv-item', { timeout: 8000 });
+    await t.page.waitForSelector('.ciudad-h', { timeout: 8000 });   // sigue dentro de la sesion: se ve la lista de ciudades
   } finally { await t.cerrar(); }
 });
 
@@ -576,9 +595,31 @@ test('Tablero: el buscador de texto filtra por punto de venta, marca o respuesta
     await t.page.fill('#bq', 'uno'); await esperar(async () => (await t.page.$$('.g-item')).length === 1, 3000, 'punto de venta Uno');
   } finally { await t.cerrar(); }
 });
+test('Tablero: la seccion Colaboraciones muestra la colaboracion con su planograma ideal y los relevamientos etiquetados, y el buscador la encuentra', async () => {
+  const PL = [
+    { id: 'c1', pdv: '*', marca: 'Bauducco', tipo: 'Exhibidor', nombre: 'Biggie_Exhibidor_Bauducco-Fini.png', url: PX },
+    { id: 'c2', pdv: '*', marca: 'Fini', tipo: 'Exhibidor', nombre: 'Biggie_Exhibidor_Bauducco-Fini.png', url: PX },
+  ];
+  const FO = [
+    ...FOTOS_TAB,
+    { id: 'k1', ts: ts0 + 120000, pdv: 'PDV Uno', marca: 'Bauducco', tipo: 'Exhibidor', relevador: 'Secreto', criterios: ['presente_si', 'abast_completo', 'visib_total', 'estado_bueno', 'cumple', 'colab:Bauducco + Fini'], url: PX, thumb: PX },
+  ];
+  const t = await nuevo({ srv: { fotos: FO, notas: NOTAS_TAB, planos: PL } }); try {
+    await tablero(t); await t.page.click('.nav-b[data-v="col"]'); await t.page.waitForSelector('.col-pl');
+    const c = await texto(t.page, '.content');
+    assert.match(c, /Colaboraciones/); assert.match(c, /Bauducco \+ Fini/); assert.match(c, /1 relevamiento/);
+    assert.equal((await t.page.$$('.col-img')).length, 1, 'el mismo planograma bajo dos marcas se muestra una sola vez');
+    assert.match(c, /PDV Uno/);
+    // el buscador encuentra los relevamientos por la etiqueta
+    await t.page.click('.nav-b[data-v="ev"]'); await t.page.waitForSelector('#bq'); await t.page.fill('#bq', 'fini');
+    await esperar(async () => (await t.page.$$('.galeria .g-item')).length === 1, 3000, 'buscador por colaboracion');
+  } finally { await t.cerrar(); }
+});
+
 test('Tablero: las fotos se pueden girar y el giro se recuerda', async () => {
   const t = await nuevo({ srv: { fotos: FOTOS_TAB, notas: NOTAS_TAB } }); try {
     await tablero(t); await t.page.click('.nav-b[data-v="eval"]'); await t.page.waitForSelector('.cmp-f .rot');
+    assert.equal(await t.page.$('.cmp-c:first-child .cmp-f .rot'), null, 'el planograma ideal no se gira');
     await t.page.click('.cmp-c:last-child .cmp-f [data-rot="90"]');
     const tr = await t.page.$eval('.cmp-c:last-child .cmp-f img', (e) => e.style.transform);
     assert.match(tr, /rotate\(90deg\)/);
