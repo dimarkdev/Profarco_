@@ -202,6 +202,8 @@
     document.getElementById('ci').onkeydown = (e) => { if (e.key === 'Enter') entrar(); };
   }
 
+  // Mapa de puntos de venta (solo relevadores de Biggie): se abre en otra pestana, asi el relevamiento en curso queda como esta.
+  const mapaUrl = () => (C.MAPA_BIGGIE_URL && (state.usuario.pdvs || []).some((p) => /biggie/i.test(p.cadena || ''))) ? C.MAPA_BIGGIE_URL : '';
   function pasoPdv() {
     const q = state.filtroPdv.toLowerCase();
     const vis = visitados();
@@ -217,6 +219,7 @@
       return `<div class="ciudad ${ab ? 'abierta' : ''}"><button type="button" class="ciudad-h" data-c="${esc(c)}" aria-expanded="${ab}"><span><b>${esc(c)}</b><small>${ps.length} punto${ps.length === 1 ? '' : 's'} de venta${nv ? ` · ${nv} visitado${nv === 1 ? '' : 's'}` : ''}</small></span><i class="chev">›</i></button>${ab ? `<div class="pdv-list">${ps.map(item).join('')}</div>` : ''}</div>`; };
     $app.innerHTML = `<div class="wrap"><h1>Punto de venta</h1><p class="lead">Hola, ${esc(state.usuario.nombre)}</p>
       <input class="in" id="q" style="margin-top:22px" placeholder="Buscar punto de venta…" value="${esc(state.filtroPdv)}" autocomplete="off">
+      ${mapaUrl() ? `<a class="btn-mapa" href="${esc(mapaUrl())}" target="_blank" rel="noopener noreferrer"><i class="mapa-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6.5v13L9 17l6 3 6-2.5v-13L15 7 9 4z"/><path d="M9 4v13M15 7v13"/></svg></i><span class="mapa-t"><b>Mapa de sucursales</b><small>Mira cuáles quedan cerca y planifica tu ruta</small></span><span class="mapa-go" aria-hidden="true">↗</span></a>` : ''}
       <div class="ciudades">${lista.length ? ciudades.map(ciudadHtml).join('')
         : '<div class="empty">No tienes puntos de venta asignados.<br>Reporta con soporte.</div>'}</div>
       <p style="text-align:center;margin-top:24px"><button class="link" id="otro">No soy ${esc(state.usuario.nombre)}</button></p></div>`;

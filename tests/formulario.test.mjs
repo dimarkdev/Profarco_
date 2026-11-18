@@ -148,6 +148,22 @@ test('Puntos de venta: primero las ciudades y al tocar una se despliegan sus suc
     await esperar(async () => (await t.page.$$eval('.pdv-item', (e) => e.map((x) => x.dataset.n))).join() === 'PDV Dos', 3000, 'busqueda abre la ciudad');
   } finally { await t.cerrar(); }
 });
+test('Mapa de puntos de venta: boton solo si hay link y el relevador es de Biggie; abre en otra pestana', async () => {
+  const MAPA = 'https://www.google.com/maps/d/viewer?mid=prueba';
+  const conMapa = (t, url = MAPA) => t.page.route('**/config.js*', async (route) => { const r = await route.fetch(); await route.fulfill({ response: r, body: (await r.text()) + `
+window.CONFIG.MAPA_BIGGIE_URL = '${url}';` }); });
+  // sin link configurado: no hay boton
+  let t = await nuevo(); try { await conMapa(t, ''); await entrar(t.page); assert.equal(await t.page.$('.btn-mapa'), null); } finally { await t.cerrar(); }
+  // con link y puntos de Biggie: boton que abre en pestana nueva (el relevamiento no se toca)
+  t = await nuevo(); try {
+    await conMapa(t); await entrar(t.page);
+    assert.equal(await t.page.getAttribute('.btn-mapa', 'href'), MAPA);
+    assert.equal(await t.page.getAttribute('.btn-mapa', 'target'), '_blank');
+    assert.match(await t.page.getAttribute('.btn-mapa', 'rel'), /noopener/);
+  } finally { await t.cerrar(); }
+  // con link pero relevador sin puntos de Biggie: no hay boton
+  t = await nuevo({ srv: { pdvs: [{ nombre: 'PDV Dos', cadena: 'REAL', ciudad: 'LUQUE' }] } }); try { await conMapa(t); await entrar(t.page); assert.equal(await t.page.$('.btn-mapa'), null); } finally { await t.cerrar(); }
+});
 test('Muestra solo los puntos de venta del relevador y se pueden buscar', async () => {
   const t = await nuevo(); try {
     await entrar(t.page);

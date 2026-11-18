@@ -13,6 +13,8 @@ window.CONFIG = {
   // Fotos: lado mayor en px y calidad JPEG (0-1).
   FOTO_MAX_PX: 1600,
   FOTO_CALIDAD: 0.8,
+  // Mapa de puntos de venta de Biggie (Google My Maps con todos los puntos marcados). Se abre en otra pestana desde la lista de puntos de venta, solo para relevadores de Biggie. Vacio = sin boton.
+  MAPA_BIGGIE_URL: 'https://www.google.com/maps/d/viewer?mid=1jHVj5t2lis0soqvrgJ0JDgQOekAQ7Mo&ll=-25.241568113749302%2C-57.55084649851137&z=13',
   // Maximo de fotos por relevamiento (un espacio de una marca).
   MIN_FOTOS: 2,   // obligatorias
   MAX_FOTOS: 5,   // 2 obligatorias + 3 adicionales

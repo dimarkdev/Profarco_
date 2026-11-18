@@ -658,3 +658,12 @@ button.k-link:focus-visible { outline: 2px solid #3cb3a8; outline-offset: 2px; }
 .ciudad.abierta > .ciudad-h { border-color: #22a447; }
 .ciudad.abierta > .ciudad-h .chev { transform: rotate(90deg); }
 .ciudad > .pdv-list { margin: 8px 0 4px 10px; padding-left: 10px; border-left: 3px solid #d7efdf; }
+
+/* Boton del mapa de puntos de venta */
+.btn-mapa { display: flex; align-items: center; gap: 14px; margin-top: 12px; padding: 12px 16px; border: 1.5px solid #bfe0ec; border-radius: var(--r-md); background: linear-gradient(135deg, #eaf6fa, #f3fbf6); color: #0b4f68; text-decoration: none; text-align: left; box-shadow: 0 2px 8px rgba(15,110,145,.08); }
+.btn-mapa:active { background: #dceef5; }
+.mapa-ico { flex: none; width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; background: #0f6e91; color: #fff; }
+.mapa-t { flex: 1; min-width: 0; }
+.mapa-t b { display: block; font-size: 15px; font-weight: 700; }
+.mapa-t small { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 400; color: #3d6677; line-height: 1.3; }
+.mapa-go { flex: none; font-size: 20px; font-weight: 700; color: #0f6e91; }
