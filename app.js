@@ -120,11 +120,19 @@
   // Variantes de un planograma segun el nombre del archivo: Cadena_Tipo_Marca[-Marca2][_detalle].ext
   //   "Fini" -> "Solo Fini" · "Bauducco-Fini" -> "Bauducco + Fini" · "Fini_12_ganchos" -> "Fini · 12 ganchos"
   const limpiaMarca = (x) => String(x || '').normalize('NFD').replace(/[̀-ͯ’'`]/g, '').toLowerCase();
-  const marcaBonita = (x) => (C.MARCAS.find((m) => limpiaMarca(m) === limpiaMarca(x)) || x);
+  const claveM = (x) => limpiaMarca(x).replace(/&/g, '');   // "M&M’s" y "MMs" valen igual
+  const marcaBonita = (x) => (C.MARCAS.find((m) => claveM(m) === claveM(x)) || x);
+  // El nombre del archivo puede traer las partes en cualquier orden: [Cadena_]Espacio_[detalle_]Marca[_detalle].ext
+  //   Se reconoce la marca (o marcas unidas con guion) por la lista de marcas, se descartan la cadena y el espacio, y lo que queda es el detalle.
+  //   "Fini" -> "Solo Fini" · "Bauducco-Fini" -> "Bauducco + Fini" · "Exhibidor_Fini_12_ganchos" -> "Fini · 12 ganchos"
   const variantePlano = (p) => {
-    const m = /^[^_]+_[^_]+_([^_]+)(?:_(.+?))?\.[A-Za-z0-9]+$/.exec(p.nombre || '');
-    if (!m) return { etiqueta: 'Planograma', orden: 0, marcas: [] };
-    const marcas = m[1].split('-').map(marcaBonita), det = (m[2] || '').replace(/_/g, ' ');
+    const toks = String(p.nombre || '').replace(/\.[A-Za-z0-9]+$/, '').split('_').filter(Boolean);
+    const esMarca = (t) => t.split('-').every((x) => C.MARCAS.some((m) => claveM(m) === claveM(x)));
+    const esTipo = (t) => /^(placa|laterales?)$/i.test(t) || C.TIPOS.some((x) => claveTipo(x.nombre) === claveTipo(t.replace(/-/g, ' ')));
+    const iM = toks.findIndex(esMarca);
+    if (iM < 0) return { etiqueta: 'Planograma', orden: 0, marcas: [] };
+    const marcas = toks[iM].split('-').map(marcaBonita);
+    const det = toks.filter((t, i) => i !== iM && !esTipo(t) && !(i === 0 && toks.length > 2 && esTipo(toks[1]))).join(' ').replace(/-/g, ' ');
     if (marcas.length > 1) return { etiqueta: marcas.join(' + ') + (det ? ' · ' + det : ''), orden: 2, marcas };
     return det ? { etiqueta: marcas[0] + ' · ' + det, orden: 1, marcas } : { etiqueta: 'Solo ' + marcas[0], orden: 0, marcas };
   };

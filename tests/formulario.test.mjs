@@ -184,6 +184,22 @@ test('Ciudad completa: cuando se visitan todas sus sucursales queda en verde con
     assert.match(await texto(t.page, '.ciudad.completa .ciudad-h small'), /Completa · 2 de 2 visitados/);
   } finally { await t.cerrar(); }
 });
+test('Nombres de planograma nuevos (Espacio_detalle_Marca): se reconocen la marca, la colaboracion y el detalle en cualquier orden', async () => {
+  const PV = [
+    { id: 'n1', pdv: '*', marca: 'Bauducco', tipo: 'Puntera', nombre: 'Puntera_Bauducco.png', url: PX },
+    { id: 'n2', pdv: '*', marca: 'Bauducco', tipo: 'Puntera', nombre: 'Puntera_Bauducco_2.png', url: PX },
+    { id: 'n3', pdv: '*', marca: 'Bauducco', tipo: 'Exhibidor', nombre: 'Exhibidor_Bauducco-Fini.png', url: PX },
+    { id: 'n4', pdv: '*', marca: 'Bauducco', tipo: 'Exhibidor', nombre: 'Exhibidor_Panettone_Bauducco.png', url: PX },
+  ];
+  const t = await nuevo({ srv: { planos: PV } }); try {
+    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Bauducco');
+    await t.page.waitForSelector('.marca-b.colab');
+    assert.deepEqual(await t.page.$$eval('.marca-b.colab', (b) => b.map((x) => x.firstChild.textContent)), ['Solo Bauducco', 'Bauducco + Fini'], 'la colaboracion se reconoce y no aparece "2" ni "Panettone" como marca');
+    await t.page.click('.marca-b.colab[data-c="0"]'); await t.page.click('.tile[data-t="puntera"]');
+    await t.page.waitForSelector('.modal .var-b');
+    assert.deepEqual(await t.page.$$eval('.modal .var-b', (b) => b.map((x) => x.textContent)), ['Solo Bauducco', 'Bauducco · 2']);
+  } finally { await t.cerrar(); }
+});
 test('Muestra solo los puntos de venta del relevador y se pueden buscar', async () => {
   const t = await nuevo(); try {
     await entrar(t.page);
