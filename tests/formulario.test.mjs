@@ -481,6 +481,19 @@ test('Atras del telefono: espacios -> marcas -> puntos de venta, sin salir de la
     assert.match(t.page.url(), /127\.0\.0\.1/);
   } finally { await t.cerrar(); }
 });
+test('Atras del telefono en la lista de puntos de venta: pregunta antes de salir; "Quedarme" sigue en la app', async () => {
+  const t = await nuevo(); try {
+    await entrar(t.page);
+    await t.page.goBack(); await t.page.waitForSelector('.modal-salir');
+    assert.match(await texto(t.page, '.modal-salir h2'), /¿Seguro que quieres salir\?/);
+    await t.page.click('.modal-salir [data-no]');
+    assert.equal(await t.page.$('.modal-salir'), null); assert.ok(await t.page.$('.pdv-item'), 'sigue en la lista');
+    assert.match(t.page.url(), /127\.0\.0\.1/);
+    await t.page.goBack(); await t.page.waitForSelector('.modal-salir');   // vuelve a preguntar
+    await t.page.click('.modal-salir [data-si]');
+    await esperar(async () => !/127\.0\.0\.1/.test(t.page.url()), 4000, 'sale de la app al confirmar');
+  } finally { await t.cerrar(); }
+});
 test('Atras del telefono con la camara abierta: cierra la camara', async () => {
   const t = await nuevo(); try {
     await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls', 'exhibidor'); await pasarReferencia(t.page);

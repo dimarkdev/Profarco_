@@ -958,18 +958,36 @@
   // Campo: aviso antes de salir con fotos sin guardar y boton "atras" del telefono que retrocede un paso dentro de la app.
   if (document.body.dataset.page === 'campo') {
     window.addEventListener('beforeunload', (e) => { if (state.fotos.length || document.querySelector('.cam')) { e.preventDefault(); e.returnValue = ''; } });
-    history.pushState({ campo: 1 }, '');
-    window.addEventListener('popstate', () => {
+    // El Chrome del telefono salta las entradas de historial creadas sin tocar la pantalla: por eso la primera se crea con el primer toque.
+    history.replaceState({ campo: 0 }, '');
+    let armado = false;
+    document.addEventListener('click', () => { if (!armado) { armado = true; history.pushState({ campo: 1 }, ''); } }, true);
+    // Atras del telefono en la lista de puntos de venta: antes de salir de la app se pregunta.
+    function confirmarSalida() {
+      if (document.querySelector('.modal-salir')) return;
+      const m = document.createElement('div'); m.className = 'modal modal-salir';
+      m.innerHTML = `<div class="modal-card"><button class="x" data-x aria-label="Cerrar">×</button>
+        <h2>¿Seguro que quieres salir?</h2>
+        <div class="sub">Tu sesión y lo ya relevado quedan guardados.</div>
+        <div class="row" style="margin-top:14px;gap:10px"><button class="btn" data-si>Salir</button><button class="btn teal" data-no>Quedarme</button></div></div>`;
+      const quedarme = () => { m.remove(); history.pushState({ campo: 1 }, ''); };
+      m.querySelector('[data-x]').onclick = m.querySelector('[data-no]').onclick = quedarme;
+      m.querySelector('[data-si]').onclick = () => { window.removeEventListener('popstate', alAtras); m.remove(); history.back(); };
+      document.body.appendChild(m);
+    }
+    function alAtras() {
       const cam = document.querySelector('.cam'), modal = document.querySelector('.modal');
       if (cam) cam.querySelector('[data-cerrar]').click();   // pide confirmacion si hay fotos
-      else if (modal) modal.querySelector('[data-x]')?.click();
+      else if (modal) { if (modal.classList.contains('modal-salir')) { modal.remove(); history.pushState({ campo: 1 }, ''); return; } modal.querySelector('[data-x]')?.click(); }
       else if (paso === 'criterios') confirmarAbandono(descartarRelevamiento);
       else if (paso === 'tipos') ir(state.hayColab ? 'colab' : 'marca');
       else if (paso === 'colab') ir('marca');
       else if (paso === 'marca') ir('pdv');
-      else { history.back(); return; }   // en el inicio si se sale de verdad
+      else if (state.usuario) { confirmarSalida(); return; }   // en la lista de puntos de venta: pregunta antes de salir
+      else { history.back(); return; }   // en el ingreso (CI) se sale de verdad
       history.pushState({ campo: 1 }, '');
-    });
+    }
+    window.addEventListener('popstate', alAtras);
   }
 
   iniciar();
