@@ -667,3 +667,9 @@ button.k-link:focus-visible { outline: 2px solid #3cb3a8; outline-offset: 2px; }
 .mapa-t b { display: block; font-size: 15px; font-weight: 700; }
 .mapa-t small { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 400; color: #3d6677; line-height: 1.3; }
 .mapa-go { flex: none; font-size: 20px; font-weight: 700; color: #0f6e91; }
+
+/* Ciudad completa: todas sus sucursales ya visitadas */
+.ciudad.completa > .ciudad-h { border: 2px solid #22a447; background: #eaf8ee; }
+.ciudad.completa > .ciudad-h small { color: #1d7f3e; font-weight: 600; }
+.ciudad-h .chk { flex: none; margin-left: auto; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: #22a447; color: #fff; font-style: normal; font-size: 14px; font-weight: 800; }
+.ciudad.completa > .pdv-list { border-left-color: #22a447; }

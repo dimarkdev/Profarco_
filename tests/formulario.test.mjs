@@ -164,6 +164,26 @@ window.CONFIG.MAPA_BIGGIE_URL = '${url}';` }); });
   // con link pero relevador sin puntos de Biggie: no hay boton
   t = await nuevo({ srv: { pdvs: [{ nombre: 'PDV Dos', cadena: 'REAL', ciudad: 'LUQUE' }] } }); try { await conMapa(t); await entrar(t.page); assert.equal(await t.page.$('.btn-mapa'), null); } finally { await t.cerrar(); }
 });
+test('Ciudad completa: cuando se visitan todas sus sucursales queda en verde con check', async () => {
+  const PD = [
+    { nombre: 'PDV Uno', cadena: 'BIGGIE', ciudad: 'ASUNCIÓN' }, { nombre: 'PDV Tres', cadena: 'BIGGIE', ciudad: 'ASUNCIÓN' },
+    { nombre: 'PDV Dos', cadena: 'BIGGIE', ciudad: 'LUQUE' },
+  ];
+  const t = await nuevo({ srv: { pdvs: PD } }); try {
+    await t.page.goto(BASE + '/index.html');
+    await t.page.fill('#ci', '1111111'); await t.page.click('#seguir'); await t.page.click('#si'); await t.page.waitForSelector('.ciudad-h');
+    assert.equal((await t.page.$$('.ciudad.completa')).length, 0, 'sin visitas ninguna ciudad esta completa');
+    const hoy = new Date().toISOString().slice(0, 10);
+    await t.page.evaluate((h) => localStorage.setItem('visitados:1111111', JSON.stringify({ 'PDV Uno': h })), hoy);
+    await t.page.click('.ciudad-h[data-c="LUQUE"]');   // vuelve a pintar
+    assert.equal((await t.page.$$('.ciudad.completa')).length, 0, 'visitar solo una de dos sucursales no completa la ciudad');
+    await t.page.evaluate((h) => localStorage.setItem('visitados:1111111', JSON.stringify({ 'PDV Uno': h, 'PDV Tres': h })), hoy);
+    await t.page.click('.ciudad-h[data-c="LUQUE"]');
+    assert.deepEqual(await t.page.$$eval('.ciudad.completa .ciudad-h b', (e) => e.map((x) => x.textContent)), ['ASUNCIÓN'], 'solo Asuncion esta completa');
+    assert.ok(await t.page.$('.ciudad.completa .ciudad-h .chk'), 'tiene check');
+    assert.match(await texto(t.page, '.ciudad.completa .ciudad-h small'), /Completa · 2 de 2 visitados/);
+  } finally { await t.cerrar(); }
+});
 test('Muestra solo los puntos de venta del relevador y se pueden buscar', async () => {
   const t = await nuevo(); try {
     await entrar(t.page);
