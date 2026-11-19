@@ -236,7 +236,7 @@ test('Marcas del punto: en verde y primero; las demas despues', async () => {
     assert.deepEqual(m.slice(0, 2).map((x) => x.d).sort(), ['Bauducco', 'Halls']);
     assert.ok(m.slice(0, 2).every((x) => /asignada/.test(x.c)), 'las dos primeras estan en verde');
     assert.equal(m.filter((x) => /asignada/.test(x.c)).length, 2);
-    assert.equal(m.length, 18, 'son 18 marcas');
+    assert.equal(m.length, 19, 'son 19 marcas');
     assert.ok(m.some((x) => x.d === 'Multimarcas'));
   } finally { await t.cerrar(); }
 });
