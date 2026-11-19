@@ -200,6 +200,18 @@ test('Nombres de planograma nuevos (Espacio_detalle_Marca): se reconocen la marc
     assert.deepEqual(await t.page.$$eval('.modal .var-b', (b) => b.map((x) => x.textContent)), ['Solo Bauducco', 'Bauducco · 2']);
   } finally { await t.cerrar(); }
 });
+test('Lista de espacios: 13 tipos con Lateral y Ambientacion; el planograma guardado como "Bandeja - lateral" se ve en Lateral', async () => {
+  const PV = [{ id: 'l1', pdv: '*', marca: 'Fini', tipo: 'Bandeja - lateral', nombre: 'Placa_laterales_Fini.png', url: PX }];
+  const t = await nuevo({ srv: { planos: PV } }); try {
+    await entrar(t.page); await irA(t.page, 'PDV Dos', 'Fini');
+    await t.page.waitForSelector('.tile');
+    const nombres = await t.page.$$eval('.tile b', (e) => e.map((x) => x.textContent));
+    assert.deepEqual(nombres, ['Puntera', 'Puntera de caja', 'Pestaña', 'Pestaña de caja', 'Exhibidor', 'Isla', 'Lateral', 'Enmarcado', 'Pórtico', 'Tramo de góndola', 'Ambientación', 'Ganchera', 'Pedestal']);
+    await t.page.click('.tile[data-t="bandeja_lateral"]');
+    await t.page.waitForSelector('.modal .ref img');
+    assert.equal(await t.page.$('.modal .empty'), null, 'el planograma del lateral aparece');
+  } finally { await t.cerrar(); }
+});
 test('Muestra solo los puntos de venta del relevador y se pueden buscar', async () => {
   const t = await nuevo(); try {
     await entrar(t.page);
@@ -234,16 +246,16 @@ test('Punto sin lista: ninguna marca ni espacio queda opaco o pintado', async ()
     assert.equal((await t.page.$$('.marca-b.asignada')).length, 0);
     await t.page.click('.marca-b[data-m="Bauducco"]'); await t.page.waitForSelector('.tile');
     assert.equal((await t.page.$$('.tile.fuera')).length, 0);
-    assert.equal((await t.page.$$('.tile')).length, 12);
+    assert.equal((await t.page.$$('.tile')).length, 13);
   } finally { await t.cerrar(); }
 });
 test('Espacios: los del punto primero, el resto opaco con la etiqueta', async () => {
   const t = await nuevo(); try {
     await entrar(t.page); await irA(t.page, 'PDV Uno', 'Bauducco'); await t.page.waitForSelector('.tile');
     const ti = await clases(t.page, '.tile');
-    assert.equal(ti.length, 12);
+    assert.equal(ti.length, 13);
     assert.deepEqual(ti.slice(0, 2).map((x) => x.d).sort(), ['exhibidor', 'puntera']);
-    assert.equal(ti.filter((x) => /fuera/.test(x.c)).length, 10);
+    assert.equal(ti.filter((x) => /fuera/.test(x.c)).length, 11);
     assert.ok(ti.slice(0, 2).every((x) => !/fuera/.test(x.c)));
     // Halls solo tiene Exhibidor
     await t.page.click('#atras'); await t.page.click('.marca-b[data-m="Halls"]'); await t.page.waitForSelector('.tile');
@@ -251,7 +263,7 @@ test('Espacios: los del punto primero, el resto opaco con la etiqueta', async ()
     assert.equal(h[0].d, 'exhibidor'); assert.equal(h.filter((x) => !/fuera/.test(x.c)).length, 1);
     // Una marca que el punto no tiene: todo opaco
     await t.page.click('#atras'); await t.page.click('.marca-b[data-m="Fini"]'); await t.page.waitForSelector('.tile');
-    assert.equal((await t.page.$$('.tile.fuera')).length, 12);
+    assert.equal((await t.page.$$('.tile.fuera')).length, 13);
   } finally { await t.cerrar(); }
 });
 test('Espacio fuera de la lista: se ve normal, el motivo es opcional y se puede cancelar', async () => {

@@ -78,13 +78,28 @@ function chequeo_(ok) {
 // La columna "CI supervisor" de Puntos de venta puede traer una o varias cedulas (separadas por coma, punto y coma o espacio).
 function asignado_(celda, ci) { return String(celda || '').split(/[^0-9]+/).filter(String).indexOf(ci) >= 0; }
 function pdvObj_(r) { return { nombre: String(r[0]).trim(), cadena: String(r[1] || ''), ciudad: String(r[2] || '') }; }
-// Planilla opcional "Espacios por punto de venta" (Punto de venta, Marca, Tipo de espacio, Cantidad). Sin planilla: no se condiciona nada.
+// Planilla opcional "Espacios por punto de venta". Las columnas se buscan por su titulo, asi que el orden no importa:
+//   Punto de venta | Categoria Marca (o Marca) | Espacio (o Tipo de espacio) | Cantidad. Otras columnas (p. ej. el detalle "Marca": "Pan Bauducco") se ignoran.
+// Sin planilla: no se condiciona nada.
+// Nombre de punto de venta sin mayusculas, tildes, espacios ni signos: "Punto Farma" y "PUNTO FARMA", "MULTI PLAZA" y "MULTIPLAZA" son el mismo.
+function clavePdv_(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, ''); }
+const ESPACIOS_GID = 344823111;
 function esperados_() {
   try {
     const m = {};
-    filas_('Espacios por punto de venta').forEach(function (r) {
-      const p = String(r[0]).trim(); if (!p || !String(r[1]).trim() || !String(r[2]).trim()) return;
-      (m[p] = m[p] || []).push({ m: String(r[1]).trim(), t: String(r[2]).trim(), n: Number(r[3]) || 1 });
+    const hojas = SpreadsheetApp.openById(planillaId_('Espacios por punto de venta')).getSheets();
+    // La informacion completa esta en la pestana con este gid (en el enlace de la planilla: ...edit?gid=344823111). Si no existe, se usa la primera pestana.
+    const hoja = hojas.filter(function (x) { return x.getSheetId() === ESPACIOS_GID; })[0] || hojas[0];
+    const v = hoja.getDataRange().getValues();
+    const h = v[0].map(function (x) { return String(x).trim().toLowerCase(); });
+    const col = function (nombres, def) { for (let i = 0; i < nombres.length; i++) { const j = h.indexOf(nombres[i]); if (j >= 0) return j; } return def; };
+    const cP = col(['punto de venta'], 0), cM = col(['categoria marca', 'categoría marca', 'marca'], 1), cT = col(['espacio', 'tipo de espacio', 'tipo'], 2), cN = col(['cantidad'], 3);
+    v.slice(1).forEach(function (r) {
+      let t = String(r[cT]).trim(), n = r[cN];
+      // Filas en el formato anterior (Punto de venta | Marca | Espacio | Cantidad): el espacio esta en la columna C y la cantidad en la D.
+      if (/^\d+$/.test(t) && !String(n).trim()) { n = t; t = String(r[cT - 1]).trim(); }
+      const p = String(r[cP]).trim(), ma = String(r[cM]).trim(); if (!p || !ma || !t) return;
+      const k = clavePdv_(p); (m[k] = m[k] || []).push({ m: ma, t: t, n: Number(n) || 1 });
     });
     return m;
   } catch (err) { return {}; }
@@ -124,7 +139,7 @@ function doPost(e) {
       const r = filas_('Relevadores').filter(function (x) { return digitos_(x[0]) === ci && activo_(x[2]); })[0];
       if (!r || !ci) return json_({ ok: false, error: 'CI no registrado' });
       const esp = esperados_();
-      const pdvs = filas_('Puntos de venta').filter(function (x) { return activo_(x[3]) && asignado_(x[4], ci); }).map(function (x) { const o = pdvObj_(x); if (esp[o.nombre]) o.esperados = esp[o.nombre]; return o; });
+      const pdvs = filas_('Puntos de venta').filter(function (x) { return activo_(x[3]) && asignado_(x[4], ci); }).map(function (x) { const o = pdvObj_(x); if (esp[clavePdv_(o.nombre)]) o.esperados = esp[clavePdv_(o.nombre)]; return o; });
       return json_({ ok: true, nombre: String(r[1]).trim(), pdvs: pdvs });
     }
     if (b.action === 'foto') return json_({ ok: true, id: guardarFoto_(b) });

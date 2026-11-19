@@ -6,7 +6,7 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmtFecha = (ts) => new Date(ts).toLocaleString('es-PY', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
   const diaISO = (ts) => { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
-  const tipoDe = (id) => C.TIPOS.find((t) => t.id === id || t.nombre === id);
+  const tipoDe = (id) => C.TIPOS.find((t) => t.id === id || t.nombre === id) || C.TIPOS.find((t) => claveTipo(t.nombre) === claveTipo(id));   // reconoce nombres viejos ("Bandeja / lateral" = "Lateral")
   // Todos los espacios aparecen para cualquier marca (sin condicionar por marca).
   const tiposDeMarca = () => C.TIPOS;
   // Espacios esperados por punto de venta (planilla "Espacios por punto de venta"). Sin datos del punto: todo vale.
@@ -111,9 +111,10 @@
   // Drive no admite "/" en nombres de carpeta: el receptor guarda "Bandeja - lateral".
   const norm = (s) => String(s ?? '').replace(/[\\/:*?"<>|]/g, '-').trim();
   const mismoTipo = (a, b) => norm(a) === norm(b);
+  const mismoEsp = (a, b) => claveTipo(a) === claveTipo(b);
   const planosDe = (pdv, marca, tipo) => {
     const t = tipoDe(tipo).nombre;
-    const cand = state.planos.filter((q) => mismoTipo(q.marca, marca) && mismoTipo(q.tipo, t));
+    const cand = state.planos.filter((q) => mismoTipo(q.marca, marca) && mismoEsp(q.tipo, t));
     const exactos = cand.filter((q) => q.pdv === pdv);
     return exactos.length ? exactos : cand.filter((q) => q.pdv === '*');
   };
@@ -793,7 +794,7 @@
             <div class="galeria">${V.length ? V.map((x) => `<button class="g-item" data-g="${esc(x.id)}">${x.fotos.length > 1 ? `<span class="n-fotos">${x.fotos.length} fotos</span>` : ''}<img src="${esc(x.fotos[0].thumb || x.fotos[0].url)}" loading="lazy" alt=""><div><b>${esc(x.pdv)}</b><small>${esc(x.marca || '')} · ${esc(x.tipo)}</small><small class="num">${fmtFecha(x.ts)}${x.fotos.some((p) => p.pendiente) ? ' · por subir' : ''}</small><div class="tags">${tags(x)}</div></div></button>`).join('') : '<div class="empty">No hay fotos con estos filtros</div>'}</div></section>`;
 
     // ── Espacios: resultado por tipo de espacio ──
-    const espDe = C.TIPOS.map((t) => { const it = V.filter((v) => mismoTipo(v.tipo, t.nombre)); const rc = it.filter((v) => resDe(v)).length;
+    const espDe = C.TIPOS.map((t) => { const it = V.filter((v) => mismoEsp(v.tipo, t.nombre)); const rc = it.filter((v) => resDe(v)).length;
       return { t, n: it.length, pc: pct(cnt(it, 'cumple'), rc), marcas: C.MARCAS.map((m) => [m, it.filter((v) => v.marca === m).length]).filter((q) => q[1]) }; });
     const secEsp = `<section><h1>Espacios</h1><p class="sub">Cumplimiento por tipo de espacio y marcas relevadas en cada uno.</p>
             <div class="filt">${buscador}${select('pdv', 'Punto de venta', opt('pdv'))}${select('marca', 'Marca', opt('marca'))}</div></section>
@@ -905,7 +906,7 @@
         <p class="muted" style="font-size:12px">Los cambios en las planillas se ven en la app en unos 10 minutos. Este botón los aplica ya.</p>
       </div>
       ${grupos.map((q) => `<div class="card" style="margin-top:14px"><h3>${esc(etiqueta(q))}</h3>${C.MARCAS.map((m) => {
-        const tipos = C.TIPOS.map((t) => [t, state.planos.filter((x) => x.pdv === q && mismoTipo(x.marca, m) && mismoTipo(x.tipo, t.nombre))]).filter((r) => r[1].length);
+        const tipos = C.TIPOS.map((t) => [t, state.planos.filter((x) => x.pdv === q && mismoTipo(x.marca, m) && mismoEsp(x.tipo, t.nombre))]).filter((r) => r[1].length);
         return tipos.length ? `<div class="label" style="margin-top:14px;color:var(--ink)">${esc(m)}</div>${tipos.map(([t, ps]) => `<div class="label" style="margin-top:8px">${esc(t.nombre)}</div><div class="plano-grid">${ps.map((x) => `<div class="foto"><img src="${esc(x.url)}" alt="" data-ver="${esc(x.url)}"><button class="x" data-borrar="${esc(x.id)}" aria-label="Borrar">×</button></div>`).join('')}</div>`).join('')}` : '';
       }).join('')}</div>`).join('')}
     </div>`;

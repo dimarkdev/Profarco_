@@ -31,11 +31,12 @@ window.CONFIG = {
     { id: 'pestana_caja', nombre: 'Pestaña de caja', img: 'img/tipos/pestana_caja.png', color: '#2a9d8f' },
     { id: 'exhibidor', nombre: 'Exhibidor', img: 'img/tipos/exhibidor.png', color: '#3cc47f' },
     { id: 'isla', nombre: 'Isla', img: 'img/tipos/isla.png', color: '#3cc47f' },
-    { id: 'bandeja_lateral', nombre: 'Bandeja / lateral', img: 'img/tipos/bandeja_lateral.png', color: '#0f6e91' },
-    { id: 'ganchera', nombre: 'Ganchera', img: 'img/tipos/ganchera.png', color: '#3b82e6' },
-    { id: 'portico', nombre: 'Pórtico', img: 'img/tipos/portico.png', color: '#2a9d8f' },
+    { id: 'bandeja_lateral', nombre: 'Lateral', img: 'img/tipos/bandeja_lateral.png', color: '#0f6e91' },   // antes "Bandeja / lateral": el id no cambia; los registros viejos con ese nombre se siguen reconociendo
     { id: 'enmarcado', nombre: 'Enmarcado', img: 'img/tipos/enmarcado.png', color: '#0f6e91' },
+    { id: 'portico', nombre: 'Pórtico', img: 'img/tipos/portico.png', color: '#2a9d8f' },
     { id: 'tramo_gondola', nombre: 'Tramo de góndola', img: 'img/tipos/tramo_gondola.png', color: '#3b82e6' },
+    { id: 'ambientacion', nombre: 'Ambientación', color: '#3cc47f' },   // sin ícono propio: usa el genérico
+    { id: 'ganchera', nombre: 'Ganchera', img: 'img/tipos/ganchera.png', color: '#3b82e6' },
     { id: 'pedestal', nombre: 'Pedestal', img: 'img/tipos/pedestal.png', color: '#3cc47f' },
   ],
 
