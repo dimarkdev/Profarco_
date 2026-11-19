@@ -12,7 +12,9 @@
   // Espacios esperados por punto de venta (planilla "Espacios por punto de venta"). Sin datos del punto: todo vale.
   const claveMarca = (s) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
   const claveTipo = (s) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim().split(' ').map((w) => w.replace(/s$/, '')).join(' ').replace(/^(bandeja|lateral)$/, 'bandeja lateral');
-  const esperadosDe = (pdv) => { const p = ((state.usuario && state.usuario.pdvs) || []).find((x) => x.nombre === pdv); return p && p.esperados && p.esperados.length ? p.esperados : null; };
+  // Una celda de la hoja puede traer varias marcas ("Bauducco / Kellogg’s", "Halls, Bubbaloo, Trident"): se separan para que cada una quede en verde.
+  const separaMarcas = (lista) => lista.flatMap((x) => String(x.m).split(/\s*[\/,]\s*/).filter(Boolean).map((m) => ({ ...x, m })));
+  const esperadosDe = (pdv) => { const p = ((state.usuario && state.usuario.pdvs) || []).find((x) => x.nombre === pdv); return p && p.esperados && p.esperados.length ? separaMarcas(p.esperados) : null; };
   const esperado = (pdv, marca, tipo) => { const e = esperadosDe(pdv); return !e || e.some((x) => claveMarca(x.m) === claveMarca(marca) && claveTipo(x.t) === claveTipo(tipo.nombre || tipo)); };
   const marcaDelPunto = (pdv, marca) => { const e = esperadosDe(pdv); return !!e && e.some((x) => claveMarca(x.m) === claveMarca(marca)); };
   // Primero lo que corresponde al punto de venta; el resto (opaco) va despues, sin cambiar su orden.

@@ -212,6 +212,14 @@ test('Lista de espacios: 13 tipos con Lateral y Ambientacion; el planograma guar
     assert.equal(await t.page.$('.modal .empty'), null, 'el planograma del lateral aparece');
   } finally { await t.cerrar(); }
 });
+test('Una celda con varias marcas ("Bauducco / Kellogg’s", "Halls, Bubbaloo") deja cada una en verde', async () => {
+  const PV = [{ nombre: 'PDV Mixto', cadena: 'SUPERMAS', ciudad: 'ASUNCIÓN', esperados: [{ m: 'Bauducco / Kellogg’s', t: 'Puntera', n: 1 }, { m: 'Halls, Bubbaloo, Trident', t: 'Puntera de caja', n: 4 }] }];
+  const t = await nuevo({ srv: { pdvs: PV } }); try {
+    await entrar(t.page); await t.page.click('.pdv-item[data-n="PDV Mixto"]'); await t.page.waitForSelector('.marca-b');
+    const m = await clases(t.page, '.marca-b');
+    assert.deepEqual(m.filter((x) => /asignada/.test(x.c)).map((x) => x.d).sort(), ['Bauducco', 'Bubbaloo', 'Halls', 'Kellogg’s', 'Trident']);
+  } finally { await t.cerrar(); }
+});
 test('Muestra solo los puntos de venta del relevador y se pueden buscar', async () => {
   const t = await nuevo(); try {
     await entrar(t.page);
