@@ -221,7 +221,7 @@ function crearFoto_(b) {
 
   const crit = (b.criterios || []);
   const res = crit.filter(function (c) { return RESULTADOS[c]; }).map(function (c) { return RESULTADOS[c]; }).join('; ');
-  const obs = crit.filter(function (c) { return !RESULTADOS[c]; }).map(function (c) { return TEXTOS[c] || c; }).join('; ');
+  const obs = crit.filter(function (c) { return !RESULTADOS[c]; }).map(function (c) { return TEXTOS[c] || (/^obs:/.test(c) ? 'Observacion del relevador: ' + c.slice(4) : c); }).join('; ');
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
   try {
     const hoja = SpreadsheetApp.openById(planillaId_('Registro de fotos')).getSheets()[0];

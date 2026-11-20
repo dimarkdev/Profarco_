@@ -470,6 +470,34 @@ test('Resultado "No cumple" cuando alguna respuesta no es favorable', async () =
     const c = posts(t.srv, 'foto')[0].criterios; assert.ok(c.includes('no_cumple') && !c.includes('cumple'));
   } finally { await t.cerrar(); }
 });
+test('Observacion cuando la marca no esta: solo aparece con "No", se guarda como obs:... y se descarta si vuelve a "Si"', async () => {
+  const t = await nuevo(); try {
+    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls');
+    await relevar(t.page, { tipoId: 'exhibidor', ids: ['presente_si'], fotos: 2 });
+    assert.equal(await t.page.$('#obs'), null, 'con "Si" no hay caja de observaciones');
+    await t.page.click('[data-c="presente_no"]'); await t.page.waitForSelector('#obs');
+    const TXT = ['El encargado dijo | que se retiro', 'el exhibidor'].join(String.fromCharCode(10));
+    await t.page.fill('#obs', TXT);
+    await responder(t.page, ['ocupa_vacio', 'estado_bueno']);   // pintar de nuevo no borra lo escrito
+    assert.equal(await t.page.inputValue('#obs'), TXT);
+    await t.page.click('#guardar');
+    await esperar(() => posts(t.srv, 'foto').length === 2, 6000, 'foto subida');
+    const c = posts(t.srv, 'foto')[0].criterios;
+    assert.ok(c.includes('obs:El encargado dijo que se retiro el exhibidor'), 'criterios: ' + c);
+    assert.ok(c.every((x) => x === 'obs:El encargado dijo que se retiro el exhibidor' || !x.includes('|')), 'sin barras que rompan el registro');
+  } finally { await t.cerrar(); }
+});
+test('Observacion escrita y luego respuesta "Si": no se envia', async () => {
+  const t = await nuevo(); try {
+    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls');
+    await relevar(t.page, { tipoId: 'exhibidor', ids: ['presente_no'], fotos: 2 });
+    await t.page.fill('#obs', 'no debe enviarse');
+    await responder(t.page, ['presente_si', 'abast_completo', 'visib_total', 'estado_bueno']);
+    assert.equal(await t.page.$('#obs'), null);
+    await t.page.click('#guardar'); await esperar(() => posts(t.srv, 'foto').length === 2, 6000, 'foto subida');
+    assert.ok(!posts(t.srv, 'foto')[0].criterios.some((x) => /^obs:/.test(x)));
+  } finally { await t.cerrar(); }
+});
 test('La foto de la camara sale ya reducida (no mas de 1600 px)', async () => {
   const t = await nuevo(); try {
     await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls'); await relevar(t.page, { tipoId: 'exhibidor', fotos: 2 }); await t.page.click('#guardar');

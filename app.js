@@ -20,7 +20,7 @@
   // Primero lo que corresponde al punto de venta; el resto (opaco) va despues, sin cambiar su orden.
   const primeroLosDelPunto = (arr, esDelPunto) => arr.map((x, i) => [x, i]).sort((a, b) => (esDelPunto(b[0]) - esDelPunto(a[0])) || (a[1] - b[1])).map((p) => p[0]);
   const tiposEsperados = (pdv, marca) => C.TIPOS.filter((t) => esperado(pdv, marca, t));
-  const criterioDe = (id) => C.CRITERIOS.find((c) => c.id === id) || (/^colab:/.test(id) ? { id, texto: 'Colaboración: ' + id.slice(6), tono: 'ok' } : { id, texto: id });
+  const criterioDe = (id) => C.CRITERIOS.find((c) => c.id === id) || (/^colab:/.test(id) ? { id, texto: 'Colaboración: ' + id.slice(6), tono: 'ok' } : /^obs:/.test(id) ? { id, texto: 'Observación: ' + id.slice(4), tono: 'warn' } : { id, texto: id });
   const guardado = (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
   const ICON_BACK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>';
   const ICON_IMG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 9"/></svg>';
@@ -106,6 +106,7 @@
     tipo: null,
     fotos: [],                             // [{blob, url}] tomadas en la camara, sin guardar
     criterios: new Set(),
+    obs: '',                               // comentario opcional cuando la marca no se encontro en el espacio
     filtroPdv: '',
     tab: { desde: '', hasta: '', pdv: '', marca: '', relevador: '', tipo: '', criterio: '', q: '' },
     datos: null,
@@ -439,7 +440,7 @@
       state.fotos = base; salir(); ir(sumar ? 'criterios' : 'tipos');
     };
     q('[data-cerrar]').onclick = () => { if (state.fotos.length - base.length) confirmarAbandono(cerrarCam); else cerrarCam(); };
-    q('[data-listo]').onclick = () => { if (state.fotos.length < C.MIN_FOTOS) return; if (!sumar) state.criterios = new Set(); salir(); ir('criterios'); };
+    q('[data-listo]').onclick = () => { if (state.fotos.length < C.MIN_FOTOS) return; if (!sumar) { state.criterios = new Set(); state.obs = ''; } salir(); ir('criterios'); };
     actualizar();
   }
 
@@ -457,9 +458,10 @@
       <div class="row" style="margin-top:14px"><button class="back" id="abandonar" aria-label="Abandonar relevamiento">${ICON_BACK}</button></div>
       <div class="thumbs">${state.fotos.map((f, i) => `<div class="foto"><img src="${esc(f.url)}" alt=""><button class="x" data-del="${i}" aria-label="Quitar">×</button></div>`).join('')}</div>
       ${visibles.map((q) => `<div class="preg"><h2>${q.numero ? ++nro + '. ' : ''}${esc(q.titulo)}</h2>${q.nota ? `<p class="muted">${esc(q.nota)}</p>` : ''}
-        <div class="opts">${q.opciones.map((o) => `<button class="opt radio ${sel.has(o.id) ? 'on' : ''}" data-c="${o.id}"><span class="box"></span>${esc(o.texto)}</button>`).join('')}</div></div>`).join('')}
+        <div class="opts">${q.opciones.map((o) => `<button class="opt radio ${sel.has(o.id) ? 'on' : ''}" data-c="${o.id}"><span class="box"></span>${esc(o.texto)}</button>`).join('')}</div></div>${q.id === 'ocupa' ? `<div class="preg"><h2>Observaciones (opcional)</h2><p class="muted">Si el encargado del local te dijo por qué la marca no está, escríbelo aquí.</p><textarea id="obs" class="obs" rows="3" maxlength="300" placeholder="Ej.: el exhibidor se retiró del local">${esc(state.obs)}</textarea></div>` : ''}`).join('')}
       <div class="sticky-bar"><div class="row"><button class="btn" id="mas" ${state.fotos.length >= C.MAX_FOTOS ? 'disabled' : ''}>+ Foto</button><button class="btn teal block" id="guardar" ${completo && state.fotos.length >= C.MIN_FOTOS ? '' : 'disabled'}>Guardar relevamiento</button></div>${state.fotos.length < C.MIN_FOTOS ? `<p class="muted" style="text-align:center;margin:8px 0 0">Faltan ${C.MIN_FOTOS - state.fotos.length} foto(s) obligatoria(s)</p>` : ''}</div></div>`;
     document.getElementById('abandonar').onclick = () => confirmarAbandono(descartarRelevamiento);
+    const cajaObs = document.getElementById('obs'); if (cajaObs) cajaObs.oninput = () => { state.obs = cajaObs.value; };   // sin volver a pintar: no pierde el cursor
     $app.querySelectorAll('[data-c]').forEach((b) => b.onclick = () => {
       const c = criterioDe(b.dataset.c);
       C.CRITERIOS.filter((x) => x.grupo === c.grupo).forEach((x) => sel.delete(x.id));   // una sola opcion por pregunta
@@ -474,7 +476,8 @@
       e.target.disabled = true; e.target.textContent = 'Guardando…';
       try {
         const n = state.fotos.length, ids = [...sel];
-        await S.guardarFotos({ pdv: state.pdv, marca: state.marca, tipo: state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, criterios: [...ids, C.resultado(ids), ...(state.variante ? ['colab:' + state.variante] : [])] }, state.fotos.map((f) => f.blob));
+        const obs = sel.has('presente_no') ? String(state.obs || '').replace(/[|\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300) : '';   // solo si la marca no esta; sin "|" porque separa los criterios
+        await S.guardarFotos({ pdv: state.pdv, marca: state.marca, tipo: state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, criterios: [...ids, C.resultado(ids), ...(state.variante ? ['colab:' + state.variante] : []), ...(obs ? ['obs:' + obs] : [])] }, state.fotos.map((f) => f.blob));
         const just = (state.extras || {})[state.marca + '|' + state.tipo.id];
         if (just) await S.guardarNota({ pdv: state.pdv, marca: state.marca, tipo: 'Adicional: ' + state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, texto: just });
         state.fotos.forEach((f) => URL.revokeObjectURL(f.url));
@@ -625,7 +628,8 @@
     }[n] || '');
     const svg = (n, s = 20) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ico(n)}</svg>`;
     const colDe = (v) => { const c = (v.criterios || []).find((id) => /^colab:/.test(id)); return c ? c.slice(6) : ''; };
-    const tags = (x) => (x.criterios || []).map((id) => { const c = criterioDe(id); return `<span class="badge ${c.tono || ''}">${esc(c.texto)}</span>`; }).join('');
+    const obsDe = (v) => { const c = (v.criterios || []).find((id) => /^obs:/.test(id)); return c ? c.slice(4) : ''; };
+    const tags = (x) => (x.criterios || []).filter((id) => !/^obs:/.test(id)).map((id) => { const c = criterioDe(id); return `<span class="badge ${c.tono || ''}">${esc(c.texto)}</span>`; }).join('');
 
     // ── Indicadores ──
     const n = V.length, c = cnt(V, 'cumple'), p = cnt(V, 'parcial'), nc = cnt(V, 'no_cumple'), sin = n - c - p - nc;
@@ -687,7 +691,7 @@
       const resChip = r ? `<span class="chip res ${criterioDe(r).tono}">${svg(r === 'cumple' ? 'cumple' : r === 'parcial' ? 'warn' : 'bad', 15)}${esc(criterioDe(r).texto)}</span>` : '<span class="chip gry">Sin resultado registrado</span>';
       const chipResp = (r) => `<span class="chip ${r.o.tono === 'bad' ? 'red' : r.o.tono === 'warn' ? 'org' : 'grn'}"><b>${esc(r.q.corto)}:</b> ${esc(r.o.texto)}</span>`;
       const resumen = `${sel.marca ? sel.marca + ' · ' : ''}${sel.tipo} en ${sel.pdv}: ${r ? criterioDe(r).texto.toLowerCase() : 'sin resultado registrado'}. ` +
-        (neg.length ? `Observaciones: ${neg.map((x) => x.q.corto.toLowerCase() + ' (' + x.o.texto.toLowerCase() + ')').join('; ')}.` : 'Todas las respuestas fueron favorables.');
+        (neg.length ? `Observaciones: ${neg.map((x) => x.q.corto.toLowerCase() + ' (' + x.o.texto.toLowerCase() + ')').join('; ')}.` : 'Todas las respuestas fueron favorables.') + (obsDe(sel) ? ` Observación del relevador: ${obsDe(sel)}` : '');
       // Si hay mas de una imagen, al pasar el mouse aparece un degradado suave en los costados para cambiar de imagen.
       const carro = (key, urls, alt, vacio, i0, girar) => (urls.length
         ? `<div class="cmp-f car" data-car="${key}"><img src="${esc(urls[i0])}" alt="${alt}" data-z="${esc(urls[i0])}">${girar ? BTN_GIRO(urls[i0]) : ''}${urls.length > 1
@@ -774,7 +778,7 @@
       const r = resDe(v), crit = v.criterios || [];
       const resp = C.PREGUNTAS.map((q) => { const o = q.opciones.find((x) => crit.includes(x.id)); return o ? { q, o } : null; }).filter(Boolean);
       return `<div class="vis"><div class="vis-h"><div><b>${esc(v.marca || '')} · ${esc(v.tipo)}</b><small>${fmtFecha(v.ts)}</small></div>${r ? `<span class="chip res ${criterioDe(r).tono}">${esc(criterioDe(r).texto)}</span>` : '<span class="chip gry">Sin resultado</span>'}</div>
-        <div class="chips">${resp.map((q) => `<span class="chip ${q.o.tono === 'bad' ? 'red' : q.o.tono === 'warn' ? 'org' : 'grn'}"><b>${esc(q.q.corto)}:</b> ${esc(q.o.texto)}</span>`).join('')}</div></div>`;
+        <div class="chips">${resp.map((q) => `<span class="chip ${q.o.tono === 'bad' ? 'red' : q.o.tono === 'warn' ? 'org' : 'grn'}"><b>${esc(q.q.corto)}:</b> ${esc(q.o.texto)}</span>`).join('')}</div>${obsDe(v) ? `<p class="muted" style="margin:8px 0 0"><b>Observación:</b> ${esc(obsDe(v))}</p>` : ''}</div>`;
     };
     const secDet = `<section><h1>Detalle de punto de venta</h1><p class="sub">Resultados, fotos y evidencias de cada visita.</p>
             <div class="filt">${buscador}<label class="f-sel"><span>Punto de venta</span><select id="detsel">${pdvsDet.map((q) => `<option ${q === detNombre ? 'selected' : ''}>${esc(q)}</option>`).join('')}</select></label></div>

@@ -673,3 +673,5 @@ button.k-link:focus-visible { outline: 2px solid #3cb3a8; outline-offset: 2px; }
 .ciudad.completa > .ciudad-h small { color: #1d7f3e; font-weight: 600; }
 .ciudad-h .chk { flex: none; margin-left: auto; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: #22a447; color: #fff; font-style: normal; font-size: 14px; font-weight: 800; }
 .ciudad.completa > .pdv-list { border-left-color: #22a447; }
+.obs { width: 100%; box-sizing: border-box; min-height: 84px; padding: 12px 14px; border: 1px solid var(--line, #dfe3e6); border-radius: 12px; background: #fff; resize: vertical; line-height: 1.4; }
+.obs:focus { outline: 2px solid #3bb3a8; outline-offset: 1px; }
