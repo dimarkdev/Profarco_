@@ -498,6 +498,18 @@ test('Observacion escrita y luego respuesta "Si": no se envia', async () => {
     assert.ok(!posts(t.srv, 'foto')[0].criterios.some((x) => /^obs:/.test(x)));
   } finally { await t.cerrar(); }
 });
+test('Tocar una miniatura abre la foto en grande antes de guardar; la x sigue quitando', async () => {
+  const t = await nuevo(); try {
+    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls');
+    await relevar(t.page, { tipoId: 'exhibidor', ids: ['presente_si'], fotos: 2 });
+    assert.equal((await t.page.$$('.thumbs .foto')).length, 2);
+    await t.page.click('.thumbs .foto [data-ver="1"]'); await t.page.waitForSelector('.lb img');
+    assert.match(await texto(t.page, '.lb-head .t'), /1 \/ 2/);
+    await t.page.click('.lb [data-x]'); assert.equal(await t.page.$('.lb'), null, 'el visor se cierra');
+    assert.equal((await t.page.$$('.thumbs .foto')).length, 2, 'abrir la foto no la quita');
+    await t.page.click('.thumbs .foto [data-del="0"]'); assert.equal((await t.page.$$('.thumbs .foto')).length, 1, 'la x sigue quitando');
+  } finally { await t.cerrar(); }
+});
 test('La foto de la camara sale ya reducida (no mas de 1600 px)', async () => {
   const t = await nuevo(); try {
     await entrar(t.page); await irA(t.page, 'PDV Uno', 'Halls'); await relevar(t.page, { tipoId: 'exhibidor', fotos: 2 }); await t.page.click('#guardar');
@@ -658,11 +670,11 @@ test('Tablero: ingreso con clave, resumen con indicadores y sin nombres de relev
   const t = await nuevo({ srv: { fotos: FOTOS_TAB, notas: NOTAS_TAB } }); try {
     await tablero(t);
     const cuerpo = await texto(t.page, 'body');
-    for (const s of ['Total de puntos de venta', 'Puntos de venta relevados', 'Espacios relevados', 'Cumplimiento', 'Marcas con más relevamientos', 'Estado por cadena', 'Espacios fuera de la lista']) assert.ok(cuerpo.includes(s), 'falta: ' + s);
+    for (const s of ['Total de puntos de venta', 'Puntos de venta relevados', 'Espacios relevados', 'Cumplimiento', 'Marcas con más relevamientos', 'Estado por cadena']) assert.ok(cuerpo.includes(s), 'falta: ' + s);
     assert.ok(!cuerpo.includes('Secreto'), 'no debe verse el nombre del relevador');
     assert.ok(!/Exportar/.test(cuerpo), 'no hay boton de exportar');
     assert.ok(!/Cumplimiento de rutas/.test(cuerpo));
-    assert.match(cuerpo, /Isla adicional de prueba/);
+    assert.ok(!cuerpo.includes('Espacios fuera de la lista') && !cuerpo.includes('Isla adicional de prueba'), 'el panel de espacios fuera de la lista no se muestra al cliente');
   } finally { await t.cerrar(); }
 });
 test('Tablero: las 2 fotos de un relevamiento forman una sola tarjeta con etiqueta "2 fotos"', async () => {

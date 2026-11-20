@@ -456,7 +456,7 @@
     const completo = visibles.every((q) => q.opciones.some((o) => sel.has(o.id)));
     $app.innerHTML = `<div class="wrap"><h1>Relevamiento</h1><p class="lead">${esc(state.pdv)} · ${esc(state.marca)} · ${esc(state.tipo.nombre)}</p>
       <div class="row" style="margin-top:14px"><button class="back" id="abandonar" aria-label="Abandonar relevamiento">${ICON_BACK}</button></div>
-      <div class="thumbs">${state.fotos.map((f, i) => `<div class="foto"><img src="${esc(f.url)}" alt=""><button class="x" data-del="${i}" aria-label="Quitar">×</button></div>`).join('')}</div>
+      <div class="thumbs">${state.fotos.map((f, i) => `<div class="foto"><img src="${esc(f.url)}" alt="Ver foto" data-ver="${i}"><button class="x" data-del="${i}" aria-label="Quitar">×</button></div>`).join('')}</div>
       ${visibles.map((q) => `<div class="preg"><h2>${q.numero ? ++nro + '. ' : ''}${esc(q.titulo)}</h2>${q.nota ? `<p class="muted">${esc(q.nota)}</p>` : ''}
         <div class="opts">${q.opciones.map((o) => `<button class="opt radio ${sel.has(o.id) ? 'on' : ''}" data-c="${o.id}"><span class="box"></span>${esc(o.texto)}</button>`).join('')}</div></div>${q.id === 'ocupa' ? `<div class="preg"><h2>Observaciones (opcional)</h2><p class="muted">Si el encargado del local te dijo por qué la marca no está, escríbelo aquí.</p><textarea id="obs" class="obs" rows="3" maxlength="300" placeholder="Ej.: el exhibidor se retiró del local">${esc(state.obs)}</textarea></div>` : ''}`).join('')}
       <div class="sticky-bar"><div class="row"><button class="btn" id="mas" ${state.fotos.length >= C.MAX_FOTOS ? 'disabled' : ''}>+ Foto</button><button class="btn teal block" id="guardar" ${completo && state.fotos.length >= C.MIN_FOTOS ? '' : 'disabled'}>Guardar relevamiento</button></div>${state.fotos.length < C.MIN_FOTOS ? `<p class="muted" style="text-align:center;margin:8px 0 0">Faltan ${C.MIN_FOTOS - state.fotos.length} foto(s) obligatoria(s)</p>` : ''}</div></div>`;
@@ -468,6 +468,8 @@
       sel.add(c.id);
       pasoCriterios();
     });
+    // Tocar una miniatura la abre en grande (visor con zoom) para revisar la foto antes de guardar; empieza en la tocada y las demas quedan con las flechas.
+    $app.querySelectorAll('[data-ver]').forEach((im) => im.onclick = () => { const i = +im.dataset.ver; lightbox([...state.fotos.slice(i), ...state.fotos.slice(0, i)].map((f) => ({ url: f.url }))); });
     $app.querySelectorAll('[data-del]').forEach((b) => b.onclick = () => { state.fotos.splice(+b.dataset.del, 1); if (!state.fotos.length) ir('tipos'); else pasoCriterios(); });
     document.getElementById('mas').onclick = () => abrirCamara(true);
     document.getElementById('guardar').onclick = async (e) => {
@@ -728,7 +730,8 @@
             ${lista.length ? lista.map((x) => `<div class="vis"><div class="vis-h"><div><b>${esc(x.pdv)} · ${esc(x.marca || '')}</b><small>${fmtFecha(x.ts)}</small></div><span class="chip org">${esc(String(x.tipo || '').replace(pref, ''))}</span></div><div class="an-l" style="margin-top:8px">Justificación</div><div class="an-box" style="min-height:0">${esc(x.texto)}</div></div>`).join('') : `<div class="empty">${vacio}</div>`}</section>`;
     const notasAdic = notas.filter((x) => /^Adicional:/.test(x.tipo || ''));
     // Solo se muestra lo que hoy configura el formulario: los espacios adicionales (fuera de la lista contemplada). Las notas "Sin relevar" antiguas ya no se muestran.
-    const secNotas = notasAdic.length ? panelNotas(notasAdic, 'Espacios fuera de la lista · ' + notasAdic.length, 'Espacios encontrados y relevados que no estaban contemplados en los acuerdos del punto de venta, con su motivo.', '', /^Adicional: /) : '';
+    // El panel "Espacios fuera de la lista" ya no se muestra al cliente. El registro sigue guardando cada caso (nota "Adicional: ...") como identificador.
+    const secNotas = '';
 
     // ── Panel lateral de una cadena: avance, indicadores y puntos de venta (sin relevar / relevados) ──
     const iniciales = (nombre) => String(nombre).replace(/[^\p{L}\p{N} ]/gu, ' ').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
