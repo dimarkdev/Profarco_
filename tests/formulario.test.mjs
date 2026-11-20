@@ -220,6 +220,28 @@ test('Una celda con varias marcas ("Bauducco / Kellogg’s", "Halls, Bubbaloo") 
     assert.deepEqual(m.filter((x) => /asignada/.test(x.c)).map((x) => x.d).sort(), ['Bauducco', 'Bubbaloo', 'Halls', 'Kellogg’s', 'Trident']);
   } finally { await t.cerrar(); }
 });
+test('"No se encontro el espacio": solo en supermercados/mayoristas; pinta el espacio en rojo, anota el motivo y el resto sigue como adicional', async () => {
+  const PV = [{ nombre: 'PDV Mixto', cadena: 'SUPERMAS', ciudad: 'ASUNCIÓN', esperados: [{ m: 'Bauducco', t: 'Puntera', n: 1 }] }];
+  const t = await nuevo({ srv: { pdvs: PV } }); try {
+    await entrar(t.page); await irA(t.page, 'PDV Mixto', 'Bauducco', 'puntera');
+    await t.page.waitForSelector('.modal [data-noenc]');
+    await t.page.click('.modal [data-noenc]'); await t.page.waitForSelector('#noenc-txt');
+    await t.page.fill('#noenc-txt', 'Ya lo retiraron');
+    await t.page.click('[data-conf]');
+    await esperar(() => posts(t.srv, 'nota').length === 1, 6000, 'nota enviada');
+    const n = posts(t.srv, 'nota')[0]; assert.equal(n.tipo, 'No encontrado: Puntera'); assert.equal(n.texto, 'Ya lo retiraron'); assert.equal(n.marca, 'Bauducco');
+    await t.page.waitForSelector('.tile[data-t="puntera"].noenc');
+    assert.match(await texto(t.page, '.tile[data-t="puntera"] .noenc-t'), /Espacio no encontrado · Ya lo retiraron/);
+    await t.page.click('.tile[data-t="isla"]'); await t.page.waitForSelector('#xtxt');   // otro espacio: se releva como adicional
+  } finally { await t.cerrar(); }
+});
+test('"No se encontro el espacio" no aparece en los puntos Biggie', async () => {
+  const t = await nuevo(); try {
+    await entrar(t.page); await irA(t.page, 'PDV Uno', 'Bauducco', 'puntera');
+    await t.page.waitForSelector('.modal [data-go]');
+    assert.equal(await t.page.$('.modal [data-noenc]'), null);
+  } finally { await t.cerrar(); }
+});
 test('Muestra solo los puntos de venta del relevador y se pueden buscar', async () => {
   const t = await nuevo(); try {
     await entrar(t.page);

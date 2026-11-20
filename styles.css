@@ -561,6 +561,13 @@ button.k-link:focus-visible { outline: 2px solid #3cb3a8; outline-offset: 2px; }
 .tile.esp b { color: #0f5c26; font-weight: 700; }
 .tile.esp img { background: #b9e8c7; }
 .tile.esp::after { color: #22a447; }
+/* Espacio contemplado que no se encontro en el local: tarjeta roja con la observacion debajo del nombre. */
+.tile.noenc, .tile.esp.noenc { background: #fde8e6 !important; border: 2px solid #d92d20 !important; box-shadow: 0 3px 12px rgba(217, 45, 32, .22); }
+.tile.noenc b { color: #8f1d14; }
+.tile.noenc img { background: #f8c9c4; }
+.tile.noenc::after { color: #d92d20; }
+.noenc-t { display: block; margin-top: 3px; font-size: 12px; font-weight: 600; color: #b42318; line-height: 1.25; }
+.btn.rojo { background: #d92d20; border-color: #d92d20; color: #fff; text-transform: uppercase; letter-spacing: .03em; box-shadow: 0 6px 16px rgba(217, 45, 32, .3); }
 .tile.esp:has(.hecho) { background: #c4ecd2 !important; }
 .tile.esp b::before { content: ''; display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 50%; background: #22a447; vertical-align: middle; }
 .tile .hecho { width: auto; height: auto; padding: 4px 11px; gap: 4px; font-size: 12px; font-weight: 700; letter-spacing: .2px; border-radius: 999px; background: #22a447; color: #fff; display: inline-flex; align-items: center; }
