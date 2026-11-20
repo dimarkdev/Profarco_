@@ -42,50 +42,52 @@
   const rotGuardar = (url, deg) => { try { const m = JSON.parse(localStorage.getItem('rot-fotos') || '{}'); if (deg) m[url] = deg; else delete m[url]; localStorage.setItem('rot-fotos', JSON.stringify(m)); } catch (e) { /* sin almacenamiento */ } };
   // Aplica el giro a una imagen y la achica lo necesario para que siga entrando en su recuadro.
   function rotAplicar(img, deg) {
-    img.style.margin = '';
     if (!deg) { img.style.transform = ''; return; }
     if (deg % 180 === 0) { img.style.transform = `rotate(${deg}deg)`; return; }
     const go = () => {
-      const w = img.offsetWidth, h = img.offsetHeight, lb = img.closest('.lb'), p = img.parentElement;
+      const w = img.offsetWidth, h = img.offsetHeight, p = img.parentElement;
       if (!w || !h) return;
-      if (lb && lb.classList.contains('zoom')) { img.style.transform = `rotate(${deg}deg)`; return; }
-      let s;
-      if (lb) { s = Math.min(1, p.clientWidth / h, (parseFloat(getComputedStyle(img).maxHeight) || innerHeight - 170) / w); img.style.margin = `${Math.max(0, (w * s - h) / 2) || (w * s - h) / 2}px 0`; }
-      else s = Math.min(p.clientWidth / h, p.clientHeight / w);
-      img.style.transform = `rotate(${deg}deg) scale(${s.toFixed(3)})`;
+      img.style.transform = `rotate(${deg}deg) scale(${Math.min(p.clientWidth / h, p.clientHeight / w).toFixed(3)})`;
     };
     if (img.complete && img.naturalWidth) go(); else img.addEventListener('load', go, { once: true });
   }
   const BTN_GIRO = (url) => `<span class="rot" data-url="${esc(url)}"><button type="button" data-rot="-90" aria-label="Girar a la izquierda" title="Girar a la izquierda">⟲</button><button type="button" data-rot="90" aria-label="Girar a la derecha" title="Girar a la derecha">⟳</button></span>`;
 
   // Visor de imagenes: una a la vez, con flechas en pantalla y del teclado (← →); Esc cierra.
-  function lightbox(items, tagsHtml, girar, grande) {   // grande: foto al ~80% de la pantalla, sin zoom (revision rapida antes de guardar)
+  function lightbox(items, tagsHtml, girar, grande, inicio) {   // grande: foto al ~80% de la pantalla, sin zoom (revision rapida antes de guardar)
     const el = document.createElement('div');
     el.className = grande ? 'lb grande' : 'lb';
-    let k = 0;
+    let k = Math.max(0, Math.min(items.length - 1, inicio || 0));
     const cerrar = () => { document.removeEventListener('keydown', tecla); el.remove(); };
     const pintar = () => {
       const i = items[k], n = items.length;
-      el.innerHTML = `<div class="lb-head"><span class="t">${n > 1 ? `${k + 1} / ${n} · ` : ''}${grande ? 'Toca fuera de la foto para cerrar' : 'Toca la imagen para acercar'}${girar ? ' · usa ⟲ ⟳ para girarla' : ''}</span><button class="lb-x" data-x aria-label="Cerrar">×</button></div>
-        <div class="lb-body"><figure><img src="${esc(i.url)}" alt="">${girar && !i.fijo ? BTN_GIRO(i.url) : ''}${i.caption ? `<div>${esc(i.caption)}</div>` : ''}${i.tags ? `<div class="lb-tags">${i.tags}</div>` : ''}</figure></div>
+      el.innerHTML = `<div class="lb-head"><span class="t">${n > 1 ? `${k + 1} / ${n} · ` : ''}${grande ? 'Toca fuera de la foto para cerrar' : 'Toca la foto para acercar'}${n > 1 ? ' · flechas ← → para cambiar' : ''}</span>${girar && !i.fijo ? BTN_GIRO(i.url) : ''}<button class="lb-x" data-x aria-label="Cerrar">×</button></div>
+        <div class="lb-body"><figure><div class="lb-frame ${grande ? '' : 'zm'}"><div class="lb-pan"><img src="${esc(i.url)}" alt=""></div></div>${i.caption ? `<div>${esc(i.caption)}</div>` : ''}${i.tags ? `<div class="lb-tags">${i.tags}</div>` : ''}</figure></div>
         ${n > 1 ? '<button class="lb-n l" data-n="-1" aria-label="Anterior">‹</button><button class="lb-n r" data-n="1" aria-label="Siguiente">›</button>' : ''}`;
       if (girar && !i.fijo) rotAplicar(el.querySelector('img'), rotLeer(i.url));
     };
     const ir = (d) => { if (items.length > 1) { k = (k + d + items.length) % items.length; pintar(); } };
     function tecla(e) { if (e.key === 'ArrowRight') ir(1); else if (e.key === 'ArrowLeft') ir(-1); else if (e.key === 'Escape') cerrar(); }
+    // Zoom dentro del recuadro: la foto se amplia sin salirse de el y sigue al dedo / mouse.
+    const mover = (e) => {
+      const fr = e.target.closest && e.target.closest('.lb-frame.on'); if (!fr) return;
+      const r = fr.getBoundingClientRect();
+      fr.firstElementChild.style.transformOrigin = `${Math.min(100, Math.max(0, (e.clientX - r.left) / r.width * 100))}% ${Math.min(100, Math.max(0, (e.clientY - r.top) / r.height * 100))}%`;
+    };
+    el.addEventListener('pointermove', mover);
     el.addEventListener('click', (e) => {
       const r = e.target.closest('[data-rot]');
       if (r) { const url = r.parentElement.dataset.url, d = (((rotLeer(url) + +r.dataset.rot) % 360) + 360) % 360; rotGuardar(url, d); rotAplicar(el.querySelector('img'), d); return; }
       const b = e.target.closest('[data-n]');
       if (b) { ir(+b.dataset.n); return; }
-      if (e.target.closest('[data-x]')) cerrar();
-      else if (grande) { if (e.target.tagName !== 'IMG') cerrar(); }
-      else if (e.target.tagName === 'IMG') { el.classList.toggle('zoom'); if (girar && !items[k].fijo) rotAplicar(el.querySelector('img'), rotLeer(items[k].url)); }
+      if (e.target.closest('[data-x]')) { cerrar(); return; }
+      const fr = e.target.closest('.lb-frame');
+      if (!fr) { if (grande) cerrar(); return; }
+      if (fr.classList.contains('zm')) { fr.classList.toggle('on'); mover(e); fr.firstElementChild.style.transform = fr.classList.contains('on') ? 'scale(2.2)' : ''; }
     });
     document.addEventListener('keydown', tecla);
     pintar();
     document.body.appendChild(el);
-    if (girar && !items[k].fijo) rotAplicar(el.querySelector('img'), rotLeer(items[k].url));
   }
 
   // Progreso de la visita (punto de venta, espacios ya relevados y justificaciones): se guarda en el telefono para retomarlo del mismo dia.
@@ -787,12 +789,24 @@
               <div class="cr-m"><div class="cr-bar"><i style="width:${a}%"></i></div><div class="cr-leg"><span><i class="ok"></i><b>${x.rel}</b> relevados</span><span><i class="pend"></i><b>${x.total - x.rel}</b> sin relevar</span><span class="mut">· total ${x.total}</span><span class="cr-p">${a}%</span></div></div></div>`; }).join('') : '<div class="empty">Sin cadenas</div>'}</div></section>
           ${secNotas}${cadSel ? drawerCadena(cadSel) : ''}`;
 
+    // ── Espacios no encontrados y adicionales: por punto de venta y marca, "no se encontró el contemplado" junto a "sí se encontró este otro" ──
+    const notasEsp = notas.filter((x) => /^(No encontrado|Adicional):/.test(x.tipo || '') && (!f.tipo || String(x.tipo).replace(/^[^:]+:\s*/, '') === f.tipo));
+    const gruposEsp = {};
+    notasEsp.forEach((x) => { const kk = [x.pdv, x.marca || '', diaISO(x.ts)].join('|'); (gruposEsp[kk] = gruposEsp[kk] || { pdv: x.pdv, marca: x.marca || '', ts: x.ts, no: [], ad: [] })[/^No encontrado:/.test(x.tipo) ? 'no' : 'ad'].push(x); });
+    const listaEsp = Object.values(gruposEsp).sort((a, b) => b.ts - a.ts);
+    const nom = (x) => esc(String(x.tipo || '').replace(/^[^:]+:\s*/, ''));
+    const panelEsp = `<section class="panel" id="s-noenc"><div class="p-head"><i class="k-ico warn">${svg('warn', 18)}</i><div><h2>Espacios no encontrados y adicionales</h2><p>Qué espacio contemplado no se encontró en el local y qué otro espacio sí se encontró en su lugar.</p></div></div>
+      ${listaEsp.length ? listaEsp.map((g) => `<div class="vis"><div class="vis-h"><div><b>${esc(g.pdv)} · ${esc(g.marca)}</b><small>${fmtFecha(g.ts)}</small></div></div>
+        ${g.no.map((x) => `<div class="an-box" style="min-height:0;margin-top:8px;border-left:4px solid #d64545"><span class="chip res bad">No se encontró</span> <b>${nom(x)}</b> <small>(espacio contemplado)</small>${x.texto && x.texto !== '(sin observación)' ? `<div class="muted" style="margin-top:4px">Observación: ${esc(x.texto)}</div>` : ''}</div>`).join('')}
+        ${g.ad.map((x) => `<div class="an-box" style="min-height:0;margin-top:8px;border-left:4px solid #1f9d6b"><span class="chip res ok">Sí se encontró</span> <b>${nom(x)}</b> <small>(espacio adicional, no contemplado)</small>${x.texto ? `<div class="muted" style="margin-top:4px">Justificación: ${esc(x.texto)}</div>` : ''}</div>`).join('')}</div>`).join('') : '<div class="empty">No hay espacios no encontrados ni adicionales con estos filtros.</div>'}</section>`;
+
     // ── Evaluación: análisis de góndolas + comparativa planograma vs foto ──
     const secEval = `<section><h1>Evaluación</h1><p class="sub">Análisis de góndolas y comparativa del planograma ideal con lo auditado.</p>${filtros}</section>
+          <section class="panel" id="s-cmp"><div class="p-head"><i class="k-ico az">${svg('cmp', 18)}</i><div><h2>${tituloEval}</h2><p>Planograma ideal frente a cumplimiento en la foto auditada.</p></div></div>${cmp}</section>
           <section class="panel" id="s-ana"><div class="p-head"><i class="k-ico warn">${svg('flag', 18)}</i><div><h2>Análisis de góndolas</h2><p>${n} góndola${n === 1 ? '' : 's'} auditada${n === 1 ? '' : 's'} con los filtros elegidos</p></div></div>
             <div class="fn-res"><span class="chip res ok">Cumple · ${c}</span><span class="chip res bad">No cumple · ${nc}</span>${sin ? `<span class="chip gry">Sin resultado · ${sin}</span>` : ''}<span class="fn-pct">${pctCumple === null ? '–' : pctCumple + '%'} cumple</span>${marcasR.map((z) => `<span class="fn-m">${esc(z.m)} <em class="${tonoPct(z.pc)}">${z.pc === null ? '–' : z.pc + '%'}</em></span>`).join('')}</div>
             <div class="fn-g">${[['Favorable', 'ok', favs], ['No favorable', 'bad', nofavs]].map(([tit, cls, arr]) => `<div class="fn-col ${cls}"><h3 class="sub-h">${tit} <b>${arr.reduce((t, r) => t + r.n, 0)}</b></h3>${arr.length ? arr.map((r) => `<div class="fn-row"><div class="fn-t"><span>${esc(r.txt)}</span><b>${r.n}</b></div><small>${r.pdvs.map(esc).join(' · ')}</small></div>`).join('') : '<div class="empty">Sin respuestas</div>'}</div>`).join('')}</div></section>
-          <section class="panel" id="s-cmp"><div class="p-head"><i class="k-ico az">${svg('cmp', 18)}</i><div><h2>${tituloEval}</h2><p>Planograma ideal frente a cumplimiento en la foto auditada.</p></div></div>${cmp}</section>`;
+          ${panelEsp}`;
 
     // ── Detalle de punto de venta: resultados, fotos y evidencias ──
     const pdvsDet = pdvsAll.filter((q) => !palabras.length || coincidePdv(q) || base.some((x) => x.pdv === q));
@@ -888,7 +902,11 @@
       lightbox([...(refs[0] ? [{ url: refs[0].url, caption: 'Planograma ideal', fijo: true }] : []), ...x.fotos.map((p, i) => ({ url: p.url, caption: `Foto auditada${x.fotos.length > 1 ? ` ${i + 1} de ${x.fotos.length}` : ''} · ${fmtFecha(p.ts)}`, tags: i === 0 ? tags(x) : '' }))], '', true);
     });
     $app.querySelectorAll('[data-colimg]').forEach((b) => b.onclick = () => lightbox([{ url: b.dataset.colimg, fijo: true }]));
-    $app.querySelectorAll('[data-z]').forEach((im) => im.onclick = () => lightbox([{ url: im.dataset.z, fijo: !im.closest('.cmp-f').querySelector('.rot') }], '', true));
+    // Tocar una imagen de la comparativa abre el visor con todas las del mismo lado (flechas en pantalla y del teclado).
+    $app.querySelectorAll('[data-z]').forEach((im) => im.onclick = () => {
+      const box = im.closest('.cmp-f'), key = box.dataset.car, urls = (carData && carData[key]) || [im.dataset.z], fijo = !box.querySelector('.rot');
+      lightbox(urls.map((u, n) => ({ url: u, fijo, caption: (key === 'ref' ? 'Planograma ideal' : 'Foto auditada') + (urls.length > 1 ? ` ${n + 1} de ${urls.length}` : '') })), '', true, false, Math.max(0, urls.indexOf(im.dataset.z)));
+    });
     // Giro en la comparativa (el cliente gira cada foto a su conveniencia; se recuerda en este navegador).
     $app.querySelectorAll('.cmp-f').forEach((b) => { const im = b.querySelector('img'); if (im && b.querySelector('.rot')) rotAplicar(im, rotLeer(im.dataset.z)); });
     $app.querySelectorAll('.cmp-f [data-rot]').forEach((b) => b.onclick = (e) => {
