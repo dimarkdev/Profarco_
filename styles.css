@@ -703,3 +703,12 @@ button.k-link:focus-visible { outline: 2px solid #3cb3a8; outline-offset: 2px; }
 .an2-p summary { cursor: pointer; color: #13665f; font-weight: 600; }
 .an2-p div { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .an2-p span { background: #f1f5f4; border-radius: 8px; padding: 2px 8px; color: #4b5a57; }
+
+/* Espacios no encontrados / adicionales: contemplado -> encontrado */
+.esp2 { display: grid; grid-template-columns: 1fr 28px 1fr; gap: 8px; align-items: stretch; margin-top: 10px; }
+.esp2-b { border-radius: 12px; padding: 10px 12px; background: #f3f5f4; font-size: 13px; }
+.esp2-b.rojo { border-left: 4px solid #d64545; } .esp2-b.verde { border-left: 4px solid #1f9d6b; }
+.esp2-b > small { display: block; margin-bottom: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #6b7a77; }
+.esp2-b .muted { margin-top: 4px; }
+.esp2-f { display: grid; place-items: center; font-size: 20px; color: #8a9996; }
+@media (max-width: 700px) { .esp2 { grid-template-columns: 1fr; } .esp2-f { transform: rotate(90deg); height: 20px; } }
