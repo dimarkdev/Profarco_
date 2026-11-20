@@ -21,7 +21,6 @@
   const primeroLosDelPunto = (arr, esDelPunto) => arr.map((x, i) => [x, i]).sort((a, b) => (esDelPunto(b[0]) - esDelPunto(a[0])) || (a[1] - b[1])).map((p) => p[0]);
   // "No se encontro el espacio": solo en supermercados y mayoristas; los puntos Biggie no lo muestran.
   const esBiggie = (pdv) => { const p = ((state.usuario && state.usuario.pdvs) || []).find((x) => x.nombre === pdv); return /^\s*biggie/i.test(pdv || '') || /biggie/i.test((p && p.cadena) || ''); };
-  const puedeNoEnc = (pdv, marca, tipo) => !!esperadosDe(pdv) && esperado(pdv, marca, tipo) && !esBiggie(pdv);
   const tiposEsperados = (pdv, marca) => C.TIPOS.filter((t) => esperado(pdv, marca, t));
   const criterioDe = (id) => C.CRITERIOS.find((c) => c.id === id) || (/^colab:/.test(id) ? { id, texto: 'Colaboración: ' + id.slice(6), tono: 'ok' } : /^obs:/.test(id) ? { id, texto: 'Observación: ' + id.slice(4), tono: 'warn' } : { id, texto: id });
   const guardado = (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
@@ -92,7 +91,7 @@
 
   // Progreso de la visita (punto de venta, espacios ya relevados y justificaciones): se guarda en el telefono para retomarlo del mismo dia.
   const hoy = () => new Date().toLocaleDateString('sv');
-  const guardarVisita = () => { try { if (!state.pdv || !state.usuario) localStorage.removeItem('visita'); else localStorage.setItem('visita', JSON.stringify({ ci: state.usuario.ci, pdv: state.pdv, dia: hoy(), hechos: [...state.hechos], extras: state.extras || {}, noEnc: state.noEnc || {}, noEncAnotado: [...(state.noEncAnotado || [])] })); } catch (e) { /* sin almacenamiento: sigue en memoria */ } };
+  const guardarVisita = () => { try { if (!state.pdv || !state.usuario) localStorage.removeItem('visita'); else localStorage.setItem('visita', JSON.stringify({ ci: state.usuario.ci, pdv: state.pdv, dia: hoy(), hechos: [...state.hechos], extras: state.extras || {}})); } catch (e) { /* sin almacenamiento: sigue en memoria */ } };
   // Puntos de venta ya visitados (con al menos un relevamiento guardado): se recuerdan en este telefono para marcarlos con un check.
   const claveVis = () => 'visitados:' + (state.usuario ? state.usuario.ci : '');
   const visitados = () => guardado(claveVis()) || {};
@@ -100,7 +99,7 @@
   const retomarVisita = (pdv) => {
     const v = guardado('visita');
     if (!v || !state.usuario || v.ci !== state.usuario.ci || v.dia !== hoy() || (pdv && v.pdv !== pdv)) return false;
-    state.pdv = v.pdv; state.hechos = new Set(v.hechos || []); state.extras = v.extras || {}; state.noEnc = v.noEnc || {}; state.noEncAnotado = new Set(v.noEncAnotado || []); return true;
+    state.pdv = v.pdv; state.hechos = new Set(v.hechos || []); state.extras = v.extras || {}; return true;
   };
 
   // ── Estado ──
@@ -113,8 +112,6 @@
     fotos: [],                             // [{blob, url}] tomadas en la camara, sin guardar
     criterios: new Set(),
     obs: '',                               // comentario opcional cuando la marca no se encontro en el espacio
-    noEncAnotado: new Set(),               // 'marca|tipo' ya anotados en el registro (se anotan junto con el espacio adicional que sí se encontró)
-    noEnc: {},                             // 'marca|tipo' -> observacion: espacio contemplado que no se encontro en el local (solo supermercados y mayoristas)
     filtroPdv: '',
     tab: { desde: '', hasta: '', pdv: '', marca: '', relevador: '', tipo: '', criterio: '', q: '' },
     datos: null,
@@ -248,13 +245,13 @@
     const q$ = document.getElementById('q');
     q$.oninput = () => { state.filtroPdv = q$.value; const p = q$.selectionStart; pasoPdv(); const n = document.getElementById('q'); n.focus(); n.setSelectionRange(p, p); };
     $app.querySelectorAll('.ciudad-h').forEach((b) => b.onclick = () => { const c = b.dataset.c; if (state.ciudadesAbiertas.has(c)) state.ciudadesAbiertas.delete(c); else state.ciudadesAbiertas.add(c); pasoPdv(); });
-    $app.querySelectorAll('[data-n]').forEach((b) => b.onclick = () => { state.ciudadesAbiertas.add(b.dataset.ci); state.pdv = b.dataset.n; if (!retomarVisita(state.pdv)) { state.hechos = new Set(); state.extras = {}; state.noEnc = {}; state.noEncAnotado = new Set(); } state.marca = ''; guardarVisita(); ir('marca'); });
+    $app.querySelectorAll('[data-n]').forEach((b) => b.onclick = () => { state.ciudadesAbiertas.add(b.dataset.ci); state.pdv = b.dataset.n; if (!retomarVisita(state.pdv)) { state.hechos = new Set(); state.extras = {}; } state.marca = ''; guardarVisita(); ir('marca'); });
     document.getElementById('otro').onclick = () => { localStorage.removeItem('usuario'); state.usuario = null; ir('ci'); };
   }
 
   // Al finalizar la visita se cierra el recorrido sin pedir motivos: el tablero muestra lo relevado y los espacios adicionales encontrados.
   function finalizarVisita() {
-    state.hechos = new Set(); state.extras = {}; state.noEnc = {}; state.noEncAnotado = new Set(); state.marca = '';
+    state.hechos = new Set(); state.extras = {}; state.marca = '';
     try { localStorage.removeItem('visita'); } catch (e) { /* igual */ }
     ir('pdv');
   }
@@ -290,7 +287,7 @@
     $app.innerHTML = `<div class="wrap"><h1>Tipo de espacio</h1><p class="lead">Selecciona el espacio a auditar</p>
       <div class="row" style="margin-top:22px"><button class="back" id="atras" aria-label="Volver">${ICON_BACK}</button><div class="sede">${esc(state.pdv)}</div></div>
       <div class="sede-sub"><span>${esc(state.marca)}${state.colab === '*' ? ' + colaboraciones' : state.colab ? ' + ' + esc(state.colab) : ''}</span></div>
-      <div class="tiles">${primeroLosDelPunto(tiposDeMarca(state.marca), (t) => esperado(state.pdv, state.marca, t)).map((t) => `<button class="tile ${t.img ? '' : 'sin-img'} ${(state.noEnc || {})[state.marca + '|' + t.id] !== undefined && !state.hechos.has(state.marca + '|' + t.id) ? 'noenc' : ''} ${esperado(state.pdv, state.marca, t) ? (esperadosDe(state.pdv) ? 'esp' : '') : 'fuera'}" data-t="${t.id}" style="background:${t.color}">${state.hechos.has(state.marca + '|' + t.id) ? `<span class="hecho">✓ Relevado</span>${esperado(state.pdv, state.marca, t) ? '' : '<span class="adic">Adicional</span>'}` : ''}${t.img ? `<img src="${t.img}" alt="">` : `<span class="tile-ico">${ico}</span>`}<b>${esc(t.nombre)}${(state.noEnc || {})[state.marca + '|' + t.id] !== undefined && !state.hechos.has(state.marca + '|' + t.id) ? `<small class="noenc-t">Espacio no encontrado${state.noEnc[state.marca + '|' + t.id] ? ' · ' + esc(state.noEnc[state.marca + '|' + t.id]) : ''}</small>` : ''}</b></button>`).join('')}</div>
+      <div class="tiles">${primeroLosDelPunto(tiposDeMarca(state.marca), (t) => esperado(state.pdv, state.marca, t)).map((t) => `<button class="tile ${t.img ? '' : 'sin-img'} ${esperado(state.pdv, state.marca, t) ? (esperadosDe(state.pdv) ? 'esp' : '') : 'fuera'}" data-t="${t.id}" style="background:${t.color}">${state.hechos.has(state.marca + '|' + t.id) ? `<span class="hecho">✓ Relevado</span>${esperado(state.pdv, state.marca, t) ? '' : '<span class="adic">Adicional</span>'}` : ''}${t.img ? `<img src="${t.img}" alt="">` : `<span class="tile-ico">${ico}</span>`}<b>${esc(t.nombre)}</b></button>`).join('')}</div>
       ${esperadosDe(state.pdv) ? '<p class="leyenda"><i class="pto"></i><span>Espacio contemplado en el acuerdo · los demás también se pueden relevar y quedan como adicionales</span></p>' : ''}
       ${state.hechos.size ? '<button class="btn primary block" id="fin" style="margin-top:22px">Finalizar visita</button>' : ''}</div>`;
     document.getElementById('atras').onclick = () => ir(state.hayColab ? 'colab' : 'marca');
@@ -350,23 +347,6 @@
     const m = document.createElement('div');
     m.className = 'modal';
     const cerrarRef = () => { m.remove(); state.abriendoRef = false; };
-    const clave = state.marca + '|' + state.tipo.id;
-    const noEncOk = puedeNoEnc(state.pdv, state.marca, state.tipo) && (state.noEnc || {})[clave] === undefined;
-    // El espacio contemplado no esta en el local: se marca en rojo con una observacion y queda anotado; luego se puede relevar otro espacio (queda como adicional).
-    const pintarNoEnc = () => {
-      m.innerHTML = `<div class="modal-card"><button class="x" data-x aria-label="Cerrar">×</button>
-        <h2>Espacio no encontrado</h2><div class="sub">${esc(state.marca)} · ${esc(state.tipo.nombre)} en ${esc(state.pdv)}</div>
-        <textarea class="in" id="noenc-txt" rows="3" maxlength="200" placeholder="Observación (opcional): por qué no está" style="margin-top:12px;width:100%"></textarea>
-        <p class="muted" style="margin:8px 0 0;font-size:12px">Esto se registra cuando guardes el espacio adicional que sí encontraste (con su foto). Si no relevás otro espacio, no queda registrado.</p>
-        <div class="row" style="margin-top:14px;gap:10px"><button class="btn" data-vol>Volver</button><button class="btn rojo" data-conf>Confirmar</button></div></div>`;
-      m.querySelector('[data-x]').onclick = () => cerrarRef();
-      m.querySelector('[data-vol]').onclick = () => pintar();
-      m.querySelector('[data-conf]').onclick = async () => {
-        const obs = m.querySelector('#noenc-txt').value.replace(/\s+/g, ' ').trim().slice(0, 200);
-        state.noEnc = state.noEnc || {}; state.noEnc[clave] = obs; guardarVisita();
-        cerrarRef(); ir('tipos');
-      };
-    };
     const pintar = () => {
       vistas.add(i);
       const listo = !ps.length || vistas.size === ps.length;
@@ -378,12 +358,11 @@
           ${ps.length > 1 ? `<div class="dots">${ps.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div>` : ''}`
           : `<div class="empty">Todavía no hay planograma de referencia de ${state.colab ? 'esta colaboración' : 'esta marca'} para este espacio.</div>`}
         <div class="hint">${listo ? (ps.length ? 'Toca la imagen para acercarla' : '') : `Mira las ${ps.length} imágenes para continuar`}</div>
-        <button class="btn teal block" data-go ${listo ? '' : 'disabled'}>Entendido, abrir cámara</button>${noEncOk ? '<button class="btn rojo block" data-noenc style="margin-top:10px">No se encontró el espacio</button>' : ''}</div>`;
+        <button class="btn teal block" data-go ${listo ? '' : 'disabled'}>Entendido, abrir cámara</button></div>`;
       m.querySelector('[data-x]').onclick = () => cerrarRef();
       m.querySelector('.ref img')?.addEventListener('click', () => lightbox([{ url: ps[i].url }]));
       m.querySelectorAll('[data-n]').forEach((b) => b.onclick = () => { i = (i + +b.dataset.n + ps.length) % ps.length; pintar(); });
       m.querySelectorAll('[data-v]').forEach((b) => b.onclick = () => { vi = +b.dataset.v; ps = vars[vi].planos; i = 0; vistas = new Set([0]); pintar(); });
-      m.querySelector('[data-noenc]')?.addEventListener('click', pintarNoEnc);
       m.querySelector('[data-go]').onclick = () => { state.variante = vars[vi] && vars[vi].marcas.length > 1 ? vars[vi].etiqueta : ''; cerrarRef(); abrirCamara(false); };
     };
     pintar();
@@ -479,15 +458,16 @@
     C.PREGUNTAS.filter((q) => omitidas.has(q.id)).forEach((q) => q.opciones.forEach((o) => sel.delete(o.id)));
     const visibles = C.PREGUNTAS.filter((q) => (!q.si || sel.has(q.si)) && !omitidas.has(q.id));
     let nro = 0;
-    const completo = visibles.every((q) => q.opciones.some((o) => sel.has(o.id)));
+    const falta = () => sel.has('presente_no') && !String(state.obs || '').trim();   // si la marca no está, la observación es obligatoria
+    const completo = visibles.every((q) => q.opciones.some((o) => sel.has(o.id))) && !falta();
     $app.innerHTML = `<div class="wrap"><h1>Relevamiento</h1><p class="lead">${esc(state.pdv)} · ${esc(state.marca)} · ${esc(state.tipo.nombre)}</p>
       <div class="row" style="margin-top:14px"><button class="back" id="abandonar" aria-label="Abandonar relevamiento">${ICON_BACK}</button></div>
       <div class="thumbs">${state.fotos.map((f, i) => `<div class="foto"><img src="${esc(f.url)}" alt="Ver foto" data-ver="${i}"><button class="x" data-del="${i}" aria-label="Quitar">×</button></div>`).join('')}</div>
       ${visibles.map((q) => `<div class="preg"><h2>${q.numero ? ++nro + '. ' : ''}${esc(q.titulo)}</h2>${q.nota ? `<p class="muted">${esc(q.nota)}</p>` : ''}
-        <div class="opts">${q.opciones.map((o) => `<button class="opt radio ${sel.has(o.id) ? 'on' : ''}" data-c="${o.id}"><span class="box"></span>${esc(o.texto)}</button>`).join('')}</div></div>${q.id === 'ocupa' ? `<div class="preg"><h2>Observaciones (opcional)</h2><p class="muted">Si el encargado del local te dijo por qué la marca no está, escríbelo aquí.</p><textarea id="obs" class="obs" rows="3" maxlength="300" placeholder="Ej.: el exhibidor se retiró del local">${esc(state.obs)}</textarea></div>` : ''}`).join('')}
+        <div class="opts">${q.opciones.map((o) => `<button class="opt radio ${sel.has(o.id) ? 'on' : ''}" data-c="${o.id}"><span class="box"></span>${esc(o.texto)}</button>`).join('')}</div></div>${q.id === 'ocupa' ? `<div class="preg"><h2>Observación obligatoria</h2><p class="muted">¿Por qué no se encontró? ¿Hay otro mueble de la marca o de otra? ¿Sin ningún producto en su lugar?</p><textarea id="obs" class="obs" rows="3" maxlength="300" placeholder="Ej.: el exhibidor se retiró del local">${esc(state.obs)}</textarea></div>` : ''}`).join('')}
       <div class="sticky-bar"><div class="row"><button class="btn" id="mas" ${state.fotos.length >= C.MAX_FOTOS ? 'disabled' : ''}>+ Foto</button><button class="btn teal block" id="guardar" ${completo && state.fotos.length >= C.MIN_FOTOS ? '' : 'disabled'}>Guardar relevamiento</button></div>${state.fotos.length < C.MIN_FOTOS ? `<p class="muted" style="text-align:center;margin:8px 0 0">Faltan ${C.MIN_FOTOS - state.fotos.length} foto(s) obligatoria(s)</p>` : ''}</div></div>`;
     document.getElementById('abandonar').onclick = () => confirmarAbandono(descartarRelevamiento);
-    const cajaObs = document.getElementById('obs'); if (cajaObs) cajaObs.oninput = () => { state.obs = cajaObs.value; };   // sin volver a pintar: no pierde el cursor
+    const cajaObs = document.getElementById('obs'); if (cajaObs) cajaObs.oninput = () => { state.obs = cajaObs.value; const g = document.getElementById('guardar'); if (g) g.disabled = !(visibles.every((q) => q.opciones.some((o) => sel.has(o.id))) && !falta() && state.fotos.length >= C.MIN_FOTOS); };   // sin volver a pintar: no pierde el cursor
     $app.querySelectorAll('[data-c]').forEach((b) => b.onclick = () => {
       const c = criterioDe(b.dataset.c);
       C.CRITERIOS.filter((x) => x.grupo === c.grupo).forEach((x) => sel.delete(x.id));   // una sola opcion por pregunta
@@ -509,14 +489,6 @@
         const just = (state.extras || {})[state.marca + '|' + state.tipo.id];
         if (just) {
           await S.guardarNota({ pdv: state.pdv, marca: state.marca, tipo: 'Adicional: ' + state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, texto: just });
-          // El "no se encontró" se registra solo junto con el espacio adicional que sí se encontró (con su foto); nunca queda suelto.
-          state.noEncAnotado = state.noEncAnotado || new Set();
-          for (const [clv, obsNo] of Object.entries(state.noEnc || {})) {
-            if (!clv.startsWith(state.marca + '|') || state.noEncAnotado.has(clv)) continue;
-            const tNo = tipoDe(clv.split('|')[1]);
-            await S.guardarNota({ pdv: state.pdv, marca: state.marca, tipo: 'No encontrado: ' + (tNo ? tNo.nombre : clv.split('|')[1]), ci: state.usuario.ci, relevador: state.usuario.nombre, texto: obsNo || '(sin observación)' });
-            state.noEncAnotado.add(clv);
-          }
         }
         state.fotos.forEach((f) => URL.revokeObjectURL(f.url));
         state.fotos = []; state.hechos.add(state.marca + '|' + state.tipo.id); guardarVisita(); marcarVisitado(state.pdv);
