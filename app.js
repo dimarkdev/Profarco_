@@ -56,14 +56,14 @@
   const BTN_GIRO = (url) => `<span class="rot" data-url="${esc(url)}"><button type="button" data-rot="-90" aria-label="Girar a la izquierda" title="Girar a la izquierda">⟲</button><button type="button" data-rot="90" aria-label="Girar a la derecha" title="Girar a la derecha">⟳</button></span>`;
 
   // Visor de imagenes: una a la vez, con flechas en pantalla y del teclado (← →); Esc cierra.
-  function lightbox(items, tagsHtml, girar) {
+  function lightbox(items, tagsHtml, girar, grande) {   // grande: foto al ~80% de la pantalla, sin zoom (revision rapida antes de guardar)
     const el = document.createElement('div');
-    el.className = 'lb';
+    el.className = grande ? 'lb grande' : 'lb';
     let k = 0;
     const cerrar = () => { document.removeEventListener('keydown', tecla); el.remove(); };
     const pintar = () => {
       const i = items[k], n = items.length;
-      el.innerHTML = `<div class="lb-head"><span class="t">${n > 1 ? `${k + 1} / ${n} · ` : ''}Toca la imagen para acercar${girar ? ' · usa ⟲ ⟳ para girarla' : ''}</span><button class="lb-x" data-x aria-label="Cerrar">×</button></div>
+      el.innerHTML = `<div class="lb-head"><span class="t">${n > 1 ? `${k + 1} / ${n} · ` : ''}${grande ? 'Toca fuera de la foto para cerrar' : 'Toca la imagen para acercar'}${girar ? ' · usa ⟲ ⟳ para girarla' : ''}</span><button class="lb-x" data-x aria-label="Cerrar">×</button></div>
         <div class="lb-body"><figure><img src="${esc(i.url)}" alt="">${girar && !i.fijo ? BTN_GIRO(i.url) : ''}${i.caption ? `<div>${esc(i.caption)}</div>` : ''}${i.tags ? `<div class="lb-tags">${i.tags}</div>` : ''}</figure></div>
         ${n > 1 ? '<button class="lb-n l" data-n="-1" aria-label="Anterior">‹</button><button class="lb-n r" data-n="1" aria-label="Siguiente">›</button>' : ''}`;
       if (girar && !i.fijo) rotAplicar(el.querySelector('img'), rotLeer(i.url));
@@ -76,6 +76,7 @@
       const b = e.target.closest('[data-n]');
       if (b) { ir(+b.dataset.n); return; }
       if (e.target.closest('[data-x]')) cerrar();
+      else if (grande) { if (e.target.tagName !== 'IMG') cerrar(); }
       else if (e.target.tagName === 'IMG') { el.classList.toggle('zoom'); if (girar && !items[k].fijo) rotAplicar(el.querySelector('img'), rotLeer(items[k].url)); }
     });
     document.addEventListener('keydown', tecla);
@@ -469,7 +470,7 @@
       pasoCriterios();
     });
     // Tocar una miniatura la abre en grande (visor con zoom) para revisar la foto antes de guardar; empieza en la tocada y las demas quedan con las flechas.
-    $app.querySelectorAll('[data-ver]').forEach((im) => im.onclick = () => { const i = +im.dataset.ver; lightbox([...state.fotos.slice(i), ...state.fotos.slice(0, i)].map((f) => ({ url: f.url }))); });
+    $app.querySelectorAll('[data-ver]').forEach((im) => im.onclick = () => { const i = +im.dataset.ver; lightbox([...state.fotos.slice(i), ...state.fotos.slice(0, i)].map((f) => ({ url: f.url })), '', false, true); });
     $app.querySelectorAll('[data-del]').forEach((b) => b.onclick = () => { state.fotos.splice(+b.dataset.del, 1); if (!state.fotos.length) ir('tipos'); else pasoCriterios(); });
     document.getElementById('mas').onclick = () => abrirCamara(true);
     document.getElementById('guardar').onclick = async (e) => {

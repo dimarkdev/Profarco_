@@ -226,6 +226,9 @@ td.c, th.c { text-align: center; }
 .lb-body img { max-width: 100%; max-height: calc(100vh - 170px); object-fit: contain; border-radius: var(--r-sm); }
 .lb.zoom .lb-body { align-items: flex-start; justify-content: flex-start; }
 .lb.zoom .lb-body img { max-width: none; max-height: none; width: 250%; }
+.lb.grande .lb-body { padding: 0 6px 12px; }
+.lb.grande .lb-body figure { max-width: none; }
+.lb.grande .lb-body img { width: auto; max-width: 94vw; max-height: 80vh; }
 .lb-tags { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 8px; }
 @media (max-width: 700px) { .lb-body { flex-direction: column; } .lb-body img { max-height: 38vh; } }
 .toast { position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); background: var(--navy); color: #fff; padding: 12px 20px; border-radius: 999px; box-shadow: var(--shadow); z-index: 80; font-weight: 500; max-width: calc(100% - 32px); text-align: center; }

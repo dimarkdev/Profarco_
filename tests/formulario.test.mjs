@@ -505,6 +505,9 @@ test('Tocar una miniatura abre la foto en grande antes de guardar; la x sigue qu
     assert.equal((await t.page.$$('.thumbs .foto')).length, 2);
     await t.page.click('.thumbs .foto [data-ver="1"]'); await t.page.waitForSelector('.lb img');
     assert.match(await texto(t.page, '.lb-head .t'), /1 \/ 2/);
+    const caja = await t.page.$eval('.lb img', (i) => { const r = i.getBoundingClientRect(); return { w: r.width / innerWidth, h: r.height / innerHeight }; });
+    assert.ok(caja.w > 0.55 || caja.h > 0.55, 'la foto ocupa buena parte de la pantalla: ' + JSON.stringify(caja));
+    await t.page.click('.lb img'); assert.ok(!(await t.page.$('.lb.zoom')), 'tocar la foto no hace zoom');
     await t.page.click('.lb [data-x]'); assert.equal(await t.page.$('.lb'), null, 'el visor se cierra');
     assert.equal((await t.page.$$('.thumbs .foto')).length, 2, 'abrir la foto no la quita');
     await t.page.click('.thumbs .foto [data-del="0"]'); assert.equal((await t.page.$$('.thumbs .foto')).length, 1, 'la x sigue quitando');
