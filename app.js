@@ -92,7 +92,7 @@
 
   // Progreso de la visita (punto de venta, espacios ya relevados y justificaciones): se guarda en el telefono para retomarlo del mismo dia.
   const hoy = () => new Date().toLocaleDateString('sv');
-  const guardarVisita = () => { try { if (!state.pdv || !state.usuario) localStorage.removeItem('visita'); else localStorage.setItem('visita', JSON.stringify({ ci: state.usuario.ci, pdv: state.pdv, dia: hoy(), hechos: [...state.hechos], extras: state.extras || {}, noEnc: state.noEnc || {} })); } catch (e) { /* sin almacenamiento: sigue en memoria */ } };
+  const guardarVisita = () => { try { if (!state.pdv || !state.usuario) localStorage.removeItem('visita'); else localStorage.setItem('visita', JSON.stringify({ ci: state.usuario.ci, pdv: state.pdv, dia: hoy(), hechos: [...state.hechos], extras: state.extras || {}, noEnc: state.noEnc || {}, noEncAnotado: [...(state.noEncAnotado || [])] })); } catch (e) { /* sin almacenamiento: sigue en memoria */ } };
   // Puntos de venta ya visitados (con al menos un relevamiento guardado): se recuerdan en este telefono para marcarlos con un check.
   const claveVis = () => 'visitados:' + (state.usuario ? state.usuario.ci : '');
   const visitados = () => guardado(claveVis()) || {};
@@ -100,7 +100,7 @@
   const retomarVisita = (pdv) => {
     const v = guardado('visita');
     if (!v || !state.usuario || v.ci !== state.usuario.ci || v.dia !== hoy() || (pdv && v.pdv !== pdv)) return false;
-    state.pdv = v.pdv; state.hechos = new Set(v.hechos || []); state.extras = v.extras || {}; state.noEnc = v.noEnc || {}; return true;
+    state.pdv = v.pdv; state.hechos = new Set(v.hechos || []); state.extras = v.extras || {}; state.noEnc = v.noEnc || {}; state.noEncAnotado = new Set(v.noEncAnotado || []); return true;
   };
 
   // ── Estado ──
@@ -113,6 +113,7 @@
     fotos: [],                             // [{blob, url}] tomadas en la camara, sin guardar
     criterios: new Set(),
     obs: '',                               // comentario opcional cuando la marca no se encontro en el espacio
+    noEncAnotado: new Set(),               // 'marca|tipo' ya anotados en el registro (se anotan junto con el espacio adicional que sí se encontró)
     noEnc: {},                             // 'marca|tipo' -> observacion: espacio contemplado que no se encontro en el local (solo supermercados y mayoristas)
     filtroPdv: '',
     tab: { desde: '', hasta: '', pdv: '', marca: '', relevador: '', tipo: '', criterio: '', q: '' },
@@ -247,13 +248,13 @@
     const q$ = document.getElementById('q');
     q$.oninput = () => { state.filtroPdv = q$.value; const p = q$.selectionStart; pasoPdv(); const n = document.getElementById('q'); n.focus(); n.setSelectionRange(p, p); };
     $app.querySelectorAll('.ciudad-h').forEach((b) => b.onclick = () => { const c = b.dataset.c; if (state.ciudadesAbiertas.has(c)) state.ciudadesAbiertas.delete(c); else state.ciudadesAbiertas.add(c); pasoPdv(); });
-    $app.querySelectorAll('[data-n]').forEach((b) => b.onclick = () => { state.ciudadesAbiertas.add(b.dataset.ci); state.pdv = b.dataset.n; if (!retomarVisita(state.pdv)) { state.hechos = new Set(); state.extras = {}; state.noEnc = {}; } state.marca = ''; guardarVisita(); ir('marca'); });
+    $app.querySelectorAll('[data-n]').forEach((b) => b.onclick = () => { state.ciudadesAbiertas.add(b.dataset.ci); state.pdv = b.dataset.n; if (!retomarVisita(state.pdv)) { state.hechos = new Set(); state.extras = {}; state.noEnc = {}; state.noEncAnotado = new Set(); } state.marca = ''; guardarVisita(); ir('marca'); });
     document.getElementById('otro').onclick = () => { localStorage.removeItem('usuario'); state.usuario = null; ir('ci'); };
   }
 
   // Al finalizar la visita se cierra el recorrido sin pedir motivos: el tablero muestra lo relevado y los espacios adicionales encontrados.
   function finalizarVisita() {
-    state.hechos = new Set(); state.extras = {}; state.noEnc = {}; state.marca = '';
+    state.hechos = new Set(); state.extras = {}; state.noEnc = {}; state.noEncAnotado = new Set(); state.marca = '';
     try { localStorage.removeItem('visita'); } catch (e) { /* igual */ }
     ir('pdv');
   }
@@ -356,13 +357,13 @@
       m.innerHTML = `<div class="modal-card"><button class="x" data-x aria-label="Cerrar">×</button>
         <h2>Espacio no encontrado</h2><div class="sub">${esc(state.marca)} · ${esc(state.tipo.nombre)} en ${esc(state.pdv)}</div>
         <textarea class="in" id="noenc-txt" rows="3" maxlength="200" placeholder="Observación (opcional): por qué no está" style="margin-top:12px;width:100%"></textarea>
+        <p class="muted" style="margin:8px 0 0;font-size:12px">Esto se registra cuando guardes el espacio adicional que sí encontraste (con su foto). Si no relevás otro espacio, no queda registrado.</p>
         <div class="row" style="margin-top:14px;gap:10px"><button class="btn" data-vol>Volver</button><button class="btn rojo" data-conf>Confirmar</button></div></div>`;
       m.querySelector('[data-x]').onclick = () => cerrarRef();
       m.querySelector('[data-vol]').onclick = () => pintar();
       m.querySelector('[data-conf]').onclick = async () => {
         const obs = m.querySelector('#noenc-txt').value.replace(/\s+/g, ' ').trim().slice(0, 200);
         state.noEnc = state.noEnc || {}; state.noEnc[clave] = obs; guardarVisita();
-        try { await S.guardarNota({ pdv: state.pdv, marca: state.marca, tipo: 'No encontrado: ' + state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, texto: obs || '(sin observación)' }); } catch (err) { toast('No se pudo anotar: ' + err.message); }
         cerrarRef(); ir('tipos');
       };
     };
@@ -506,7 +507,17 @@
         const obs = sel.has('presente_no') ? String(state.obs || '').replace(/[|\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300) : '';   // solo si la marca no esta; sin "|" porque separa los criterios
         await S.guardarFotos({ pdv: state.pdv, marca: state.marca, tipo: state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, criterios: [...ids, C.resultado(ids), ...(state.variante ? ['colab:' + state.variante] : []), ...(obs ? ['obs:' + obs] : [])] }, state.fotos.map((f) => f.blob));
         const just = (state.extras || {})[state.marca + '|' + state.tipo.id];
-        if (just) await S.guardarNota({ pdv: state.pdv, marca: state.marca, tipo: 'Adicional: ' + state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, texto: just });
+        if (just) {
+          await S.guardarNota({ pdv: state.pdv, marca: state.marca, tipo: 'Adicional: ' + state.tipo.nombre, ci: state.usuario.ci, relevador: state.usuario.nombre, texto: just });
+          // El "no se encontró" se registra solo junto con el espacio adicional que sí se encontró (con su foto); nunca queda suelto.
+          state.noEncAnotado = state.noEncAnotado || new Set();
+          for (const [clv, obsNo] of Object.entries(state.noEnc || {})) {
+            if (!clv.startsWith(state.marca + '|') || state.noEncAnotado.has(clv)) continue;
+            const tNo = tipoDe(clv.split('|')[1]);
+            await S.guardarNota({ pdv: state.pdv, marca: state.marca, tipo: 'No encontrado: ' + (tNo ? tNo.nombre : clv.split('|')[1]), ci: state.usuario.ci, relevador: state.usuario.nombre, texto: obsNo || '(sin observación)' });
+            state.noEncAnotado.add(clv);
+          }
+        }
         state.fotos.forEach((f) => URL.revokeObjectURL(f.url));
         state.fotos = []; state.hechos.add(state.marca + '|' + state.tipo.id); guardarVisita(); marcarVisitado(state.pdv);
         toast(!S.remoto ? `${n} foto(s) guardadas en este dispositivo (modo prueba)` : navigator.onLine ? 'Relevamiento guardado. Se está subiendo en segundo plano.' : `Guardado en el teléfono: ${n} foto(s) se subirán cuando haya señal`);
@@ -704,7 +715,11 @@
     const marcasR = C.MARCAS.map((m) => { const it = V.filter((x) => x.marca === m); return { m, n: it.length, pc: pct(cnt(it, 'cumple'), it.filter((x) => resDe(x)).length) }; }).filter((z) => z.n).sort((a, b) => b.n - a.n);
 
     // ── Evaluación: planograma vs foto auditada ──
-    const idx = Math.max(0, V.findIndex((v) => v.fotos.some((x) => x.id === state.sel)));
+    // Al abrir (sin elegir una foto) se muestra primero una góndola ideal: todo favorable y con planograma de referencia; si no hay, una que cumple, y si no, la primera.
+    const todoFav = (v) => !C.PREGUNTAS.some((q) => { const o = q.opciones.find((x) => (v.criterios || []).includes(x.id)); return o && o.tono !== 'ok'; });
+    const conRef = (v) => { const t = tipoDe(v.tipo); return !!(t && planosDe(v.pdv, v.marca, t.id).length); };
+    const elegida = V.findIndex((v) => v.fotos.some((x) => x.id === state.sel));
+    const idx = elegida >= 0 ? elegida : Math.max(0, [(v) => resDe(v) === 'cumple' && todoFav(v) && conRef(v), (v) => resDe(v) === 'cumple' && conRef(v), (v) => conRef(v)].reduce((r, fn) => (r >= 0 ? r : V.findIndex(fn)), -1));
     const sel = V[idx] || null;
     let cmp = '<div class="empty">Aún no hay fotos para comparar con estos filtros.</div>', tituloEval = 'Evaluación de góndola';
     const carData = {};
@@ -729,7 +744,7 @@
           <div class="cmp-nav"><button class="ic-btn" id="prev" ${idx === 0 ? 'disabled' : ''} aria-label="Anterior">‹</button><span>${idx + 1} / ${V.length}</span><button class="ic-btn" id="next" ${idx === V.length - 1 ? 'disabled' : ''} aria-label="Siguiente">›</button></div></div>
         <div class="cmp-t"><span>Comparativa visual</span></div>
         <div class="cmp">
-          <div class="cmp-c"><div class="cmp-l">Planograma ideal</div>${carro('ref', carData.ref, 'Planograma ideal', 'Sin planograma de referencia para esta zona', 0)}<small>${esc(sel.marca || '')} · ${esc(sel.tipo)} · ${refs[0] && refs[0].pdv !== '*' ? esc(refs[0].pdv) : 'Planograma general'}${refs.length > 1 ? ` · ${refs.length} imágenes` : ''}</small></div>
+          <div class="cmp-c"><div class="cmp-l">Planograma ideal</div>${carro('ref', carData.ref, 'Planograma ideal', 'Sin planograma de referencia para esta zona', 0)}<small>${esc(sel.marca || '')} · ${esc(sel.tipo)} · ${!refs.length ? 'Sin planograma cargado' : refs[0].pdv !== '*' ? esc(refs[0].pdv) : 'Planograma general'}${refs.length > 1 ? ` · ${refs.length} imágenes` : ''}</small></div>
           <div class="cmp-arrow" aria-hidden="true"><span class="line"></span><i>→</i><span class="line"></span></div>
           <div class="cmp-c"><div class="cmp-l">Foto auditada</div>${carro('foto', carData.foto, 'Foto auditada', 'Sin imagen', ini, true)}<small>${esc(sel.pdv)} · ${fmtFecha(sel.ts)}${nF > 1 ? ` · ${nF} fotos` : ''}</small></div>
         </div>
@@ -792,21 +807,35 @@
     // ── Espacios no encontrados y adicionales: por punto de venta y marca, "no se encontró el contemplado" junto a "sí se encontró este otro" ──
     const notasEsp = notas.filter((x) => /^(No encontrado|Adicional):/.test(x.tipo || '') && (!f.tipo || String(x.tipo).replace(/^[^:]+:\s*/, '') === f.tipo));
     const gruposEsp = {};
+    // Relevamientos donde la marca no se encontró en el espacio (respuesta "No, no se encontró"): también cuentan, en cualquier cadena (Biggie incluida).
+    const qOcupa = C.PREGUNTAS.find((q) => q.id === 'ocupa');
+    V.filter((v) => (v.criterios || []).includes('presente_no') && !notasEsp.some((x) => /^No encontrado:/.test(x.tipo) && x.pdv === v.pdv && x.marca === v.marca && String(x.tipo).replace(/^[^:]+:\s*/, '') === v.tipo)).forEach((v) => {
+      const oc = qOcupa && qOcupa.opciones.find((o) => (v.criterios || []).includes(o.id));
+      notasEsp.push({ pdv: v.pdv, marca: v.marca, ts: v.ts, tipo: 'No encontrado: ' + v.tipo, texto: obsDe(v), ocupa: oc ? oc.texto : '' });
+    });
     notasEsp.forEach((x) => { const kk = [x.pdv, x.marca || '', diaISO(x.ts)].join('|'); (gruposEsp[kk] = gruposEsp[kk] || { pdv: x.pdv, marca: x.marca || '', ts: x.ts, no: [], ad: [] })[/^No encontrado:/.test(x.tipo) ? 'no' : 'ad'].push(x); });
     const listaEsp = Object.values(gruposEsp).sort((a, b) => b.ts - a.ts);
     const nom = (x) => esc(String(x.tipo || '').replace(/^[^:]+:\s*/, ''));
     const panelEsp = `<section class="panel" id="s-noenc"><div class="p-head"><i class="k-ico warn">${svg('warn', 18)}</i><div><h2>Espacios no encontrados y adicionales</h2><p>Qué espacio contemplado no se encontró en el local y qué otro espacio sí se encontró en su lugar.</p></div></div>
       ${listaEsp.length ? listaEsp.map((g) => `<div class="vis"><div class="vis-h"><div><b>${esc(g.pdv)} · ${esc(g.marca)}</b><small>${fmtFecha(g.ts)}</small></div></div>
-        ${g.no.map((x) => `<div class="an-box" style="min-height:0;margin-top:8px;border-left:4px solid #d64545"><span class="chip res bad">No se encontró</span> <b>${nom(x)}</b> <small>(espacio contemplado)</small>${x.texto && x.texto !== '(sin observación)' ? `<div class="muted" style="margin-top:4px">Observación: ${esc(x.texto)}</div>` : ''}</div>`).join('')}
+        ${g.no.map((x) => `<div class="an-box" style="min-height:0;margin-top:8px;border-left:4px solid #d64545"><span class="chip res bad">No se encontró</span> <b>${nom(x)}</b> <small>(espacio contemplado)</small>${x.ocupa ? `<div class="muted" style="margin-top:4px">Ocupa el espacio: ${esc(x.ocupa)}</div>` : ''}${x.texto && x.texto !== '(sin observación)' ? `<div class="muted" style="margin-top:4px">Observación: ${esc(x.texto)}</div>` : ''}</div>`).join('')}
         ${g.ad.map((x) => `<div class="an-box" style="min-height:0;margin-top:8px;border-left:4px solid #1f9d6b"><span class="chip res ok">Sí se encontró</span> <b>${nom(x)}</b> <small>(espacio adicional, no contemplado)</small>${x.texto ? `<div class="muted" style="margin-top:4px">Justificación: ${esc(x.texto)}</div>` : ''}</div>`).join('')}</div>`).join('') : '<div class="empty">No hay espacios no encontrados ni adicionales con estos filtros.</div>'}</section>`;
 
     // ── Evaluación: análisis de góndolas + comparativa planograma vs foto ──
     const secEval = `<section><h1>Evaluación</h1><p class="sub">Análisis de góndolas y comparativa del planograma ideal con lo auditado.</p>${filtros}</section>
           <section class="panel" id="s-cmp"><div class="p-head"><i class="k-ico az">${svg('cmp', 18)}</i><div><h2>${tituloEval}</h2><p>Planograma ideal frente a cumplimiento en la foto auditada.</p></div></div>${cmp}</section>
+          ${panelEsp}
           <section class="panel" id="s-ana"><div class="p-head"><i class="k-ico warn">${svg('flag', 18)}</i><div><h2>Análisis de góndolas</h2><p>${n} góndola${n === 1 ? '' : 's'} auditada${n === 1 ? '' : 's'} con los filtros elegidos</p></div></div>
             <div class="fn-res"><span class="chip res ok">Cumple · ${c}</span><span class="chip res bad">No cumple · ${nc}</span>${sin ? `<span class="chip gry">Sin resultado · ${sin}</span>` : ''}<span class="fn-pct">${pctCumple === null ? '–' : pctCumple + '%'} cumple</span>${marcasR.map((z) => `<span class="fn-m">${esc(z.m)} <em class="${tonoPct(z.pc)}">${z.pc === null ? '–' : z.pc + '%'}</em></span>`).join('')}</div>
-            <div class="fn-g">${[['Favorable', 'ok', favs], ['No favorable', 'bad', nofavs]].map(([tit, cls, arr]) => `<div class="fn-col ${cls}"><h3 class="sub-h">${tit} <b>${arr.reduce((t, r) => t + r.n, 0)}</b></h3>${arr.length ? arr.map((r) => `<div class="fn-row"><div class="fn-t"><span>${esc(r.txt)}</span><b>${r.n}</b></div><small>${r.pdvs.map(esc).join(' · ')}</small></div>`).join('') : '<div class="empty">Sin respuestas</div>'}</div>`).join('')}</div></section>
-          ${panelEsp}`;
+            <div class="an2">${C.PREGUNTAS.map((q) => {
+              const ops = q.opciones.map((o) => { const it = V.filter((v) => (v.criterios || []).includes(o.id)); return { o, n: it.length, pdvs: [...new Set(it.map((v) => v.pdv))].sort((u, w) => u.localeCompare(w)) }; });
+              const tot = ops.reduce((t, r) => t + r.n, 0); if (!tot) return '';
+              const col = { ok: '#22a447', warn: '#d89b14', bad: '#d64545' };
+              return `<div class="an2-c"><h3>${esc(q.corto)}</h3><small class="an2-q">${esc(q.titulo || '')}</small>
+                <div class="an2-bar">${ops.filter((r) => r.n).map((r) => `<i style="width:${(r.n / tot) * 100}%;background:${col[r.o.tono] || '#9aa8a5'}" title="${esc(r.o.texto)}: ${r.n}"></i>`).join('')}</div>
+                ${ops.filter((r) => r.n).map((r) => `<div class="an2-r"><span class="an2-d" style="background:${col[r.o.tono] || '#9aa8a5'}"></span><span class="an2-t">${esc(r.o.texto)}</span><b>${r.n}</b><em>${Math.round((r.n / tot) * 100)}%</em>
+                  ${r.o.tono !== 'ok' ? `<details class="an2-p"><summary>Ver puntos de venta (${r.pdvs.length})</summary><div>${r.pdvs.map((x) => `<span>${esc(x)}</span>`).join('')}</div></details>` : ''}</div>`).join('')}</div>`;
+            }).join('') || '<div class="empty">Sin respuestas</div>'}</div></section>`;
 
     // ── Detalle de punto de venta: resultados, fotos y evidencias ──
     const pdvsDet = pdvsAll.filter((q) => !palabras.length || coincidePdv(q) || base.some((x) => x.pdv === q));
