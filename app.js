@@ -113,7 +113,7 @@
     criterios: new Set(),
     obs: '',                               // comentario opcional cuando la marca no se encontro en el espacio
     filtroPdv: '',
-    tab: { desde: '', hasta: '', pdv: '', marca: '', relevador: '', tipo: '', criterio: '', q: '' },
+    tab: { desde: '', hasta: '', pdvs: [], marca: '', relevador: '', tipo: '', criterio: '', q: '' },
     datos: null,
   };
   // Drive no admite "/" en nombres de carpeta: el receptor guarda "Bandeja - lateral".
@@ -601,7 +601,7 @@
       (!f.desde || diaISO(x.ts) >= f.desde) && (!f.hasta || diaISO(x.ts) <= f.hasta) &&
       (!f.marca || x.marca === f.marca) && (!f.relevador || x.relevador === f.relevador) && (!f.tipo || x.tipo === f.tipo) &&
       (!f.criterio || (x.criterios || []).includes(f.criterio))).sort((a, b) => b.ts - a.ts);
-    const lista = base.filter((x) => !f.pdv || x.pdv === f.pdv);
+    const lista = base.filter((x) => !f.pdvs.length || f.pdvs.includes(x.pdv));
     const vista = state.vista || 'resumen';
 
     const agrupar = (arr) => {
@@ -647,7 +647,7 @@
     const n = V.length, c = cnt(V, 'cumple'), p = cnt(V, 'parcial'), nc = cnt(V, 'no_cumple'), sin = n - c - p - nc;
     const conRes = c + p + nc, pctCumple = pct(c, conRes);
     const pdvsAll = [...new Set([...nombresPdv(), ...base.map((x) => x.pdv)])].sort((a, b) => a.localeCompare(b));
-    const pdvsVista = (f.pdv ? pdvsAll.filter((q) => q === f.pdv) : pdvsAll).filter((q) => !palabras.length || coincidePdv(q) || base.some((x) => x.pdv === q));
+    const pdvsVista = (f.pdvs.length ? pdvsAll.filter((q) => f.pdvs.includes(q)) : pdvsAll).filter((q) => !palabras.length || coincidePdv(q) || base.some((x) => x.pdv === q));
     const relevados = pdvsVista.filter((q) => V.some((v) => v.pdv === q)).length;
     const pctRuta = pct(relevados, pdvsVista.length);
     const kpi = (cls, icono, titulo, valor, extra, ir) => `<${ir ? `button type="button" class="k-card k-link" data-v="${ir}" title="Ver ${titulo.toLowerCase()}"` : 'div class="k-card"'}><div class="k-top"><span>${titulo}</span><i class="k-ico ${cls}">${svg(icono, 18)}</i></div><div class="k-row"><div class="k-val">${valor}</div>${extra || ''}</div></${ir ? 'button' : 'div'}>`;
@@ -733,13 +733,23 @@
     const select = (k, label, vals) => `<label class="f-sel"><span>${label}</span><select data-f="${k}"><option value="">Todos</option>${vals.map((v) => `<option ${f[k] === v ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label>`;
     const per = (id, txt) => `<button class="seg-b ${state.periodo === id ? 'on' : ''}" data-p="${id}">${txt}</button>`;
     const nav = (id, ic, txt) => `<button class="nav-b ${vista === id ? 'on' : ''}" data-v="${id}">${svg(ic, 19)}<span>${txt}</span></button>`;
+    // Punto de venta: lista con casillas. Se escribe para filtrar la lista (por nombre, cadena o ciudad) y se tildan los que se quieren ver.
+    const multiPdv = () => {
+      const sel = f.pdvs, w = norm(state.pdvQ || '').split(/\s+/).filter(Boolean);
+      const resumen = !sel.length ? 'Todos' : sel.length === 1 ? sel[0] : `${sel.length} seleccionados`;
+      const ciudadDe = {}; state.pdvs.forEach((p) => { ciudadDe[p.nombre] = p.ciudad || ''; });
+      return `<div class="f-multi"><span>Punto de venta</span><details ${state.pdvAbierto ? 'open' : ''}><summary>${esc(resumen)}</summary>
+        <div class="fm-p"><input type="search" class="fm-q" placeholder="Escribí: biggie, real, luque…" value="${esc(state.pdvQ || '')}" autocomplete="off">
+          <div class="fm-a"><button type="button" data-fm="vis">Marcar los que se ven</button><button type="button" data-fm="no">Quitar todos</button></div>
+          <div class="fm-l">${opt('pdv').map((v) => { const n = norm(v + ' ' + (cadenaDe[v] || '') + ' ' + (ciudadDe[v] || '')); return `<label class="fm-o" data-n="${esc(n)}" ${w.every((x) => n.includes(x)) ? '' : 'hidden'}><input type="checkbox" data-pv="${esc(v)}" ${sel.includes(v) ? 'checked' : ''}><span>${esc(v)}</span></label>`; }).join('')}</div></div></details></div>`;
+    };
     const buscador = `<label class="f-sel f-q"><span>Buscar</span><input type="search" id="bq" placeholder="Punto de venta, cadena, marca, espacio, fecha…" value="${esc(f.q)}" autocomplete="off"></label>`;
-    const filtros = `<div class="filt">${buscador}${select('pdv', 'Punto de venta', opt('pdv'))}${select('marca', 'Marca', opt('marca'))}${select('tipo', 'Tipo de espacio', C.TIPOS.map((t) => t.nombre))}
+    const filtros = `<div class="filt">${buscador}${multiPdv()}${select('marca', 'Marca', opt('marca'))}${select('tipo', 'Tipo de espacio', C.TIPOS.map((t) => t.nombre))}
               <label class="f-sel"><span>Respuesta</span><select data-f="criterio"><option value="">Todas</option>${C.CRITERIOS.filter((cr) => !cr.derivado).map((cr) => `<option value="${cr.id}" ${f.criterio === cr.id ? 'selected' : ''}>${esc(cr.etiqueta || cr.texto)}</option>`).join('')}</select></label>
               <label class="f-sel"><span>Desde</span><input type="date" data-f="desde" value="${f.desde}"></label><label class="f-sel"><span>Hasta</span><input type="date" data-f="hasta" value="${f.hasta}"></label></div>`;
 
     // ── Visitas incompletas: motivo por el que no se relevaron todos los espacios ──
-    const notas = (S.notas || []).filter((x) => (!f.desde || diaISO(x.ts) >= f.desde) && (!f.hasta || diaISO(x.ts) <= f.hasta) && (!f.pdv || x.pdv === f.pdv) && (!f.marca || x.marca === f.marca)).sort((a, b) => b.ts - a.ts);
+    const notas = (S.notas || []).filter((x) => (!f.desde || diaISO(x.ts) >= f.desde) && (!f.hasta || diaISO(x.ts) <= f.hasta) && (!f.pdvs.length || f.pdvs.includes(x.pdv)) && (!f.marca || x.marca === f.marca)).sort((a, b) => b.ts - a.ts);
     const panelNotas = (lista, tit, sub, vacio, pref) => `<section class="panel"><div class="p-head"><i class="k-ico warn">${svg('warn', 18)}</i><div><h2>${tit}</h2><p>${sub}</p></div></div>
             ${lista.length ? lista.map((x) => `<div class="vis"><div class="vis-h"><div><b>${esc(x.pdv)} · ${esc(x.marca || '')}</b><small>${fmtFecha(x.ts)}</small></div><span class="chip org">${esc(String(x.tipo || '').replace(pref, ''))}</span></div><div class="an-l" style="margin-top:8px">Justificación</div><div class="an-box" style="min-height:0">${esc(x.texto)}</div></div>`).join('') : `<div class="empty">${vacio}</div>`}</section>`;
     const notasAdic = notas.filter((x) => /^Adicional:/.test(x.tipo || ''));
@@ -838,7 +848,7 @@
             <div class="galeria">${VD.length ? VD.map((x) => `<button class="g-item" data-g="${esc(x.id)}">${x.fotos.length > 1 ? `<span class="n-fotos">${x.fotos.length} fotos</span>` : ''}<img src="${esc(x.fotos[0].thumb || x.fotos[0].url)}" loading="lazy" alt=""><div><b>${esc(x.marca || '')} · ${esc(x.tipo)}</b><small class="num">${fmtFecha(x.ts)}${x.fotos.some((p) => p.pendiente) ? ' · por subir' : ''}</small><div class="tags">${tags(x)}</div></div></button>`).join('') : '<div class="empty">Aún no hay fotos</div>'}</div></section>`;
 
     // ── Evidencias: fotos por local, marca y espacio ──
-    const filtrosEv = `<div class="filt">${buscador}${select('pdv', 'Punto de venta', opt('pdv'))}${select('marca', 'Marca', opt('marca'))}${select('tipo', 'Tipo de espacio', C.TIPOS.map((t) => t.nombre))}
+    const filtrosEv = `<div class="filt">${buscador}${multiPdv()}${select('marca', 'Marca', opt('marca'))}${select('tipo', 'Tipo de espacio', C.TIPOS.map((t) => t.nombre))}
               <label class="f-sel"><span>Desde</span><input type="date" data-f="desde" value="${f.desde}"></label><label class="f-sel"><span>Hasta</span><input type="date" data-f="hasta" value="${f.hasta}"></label></div>`;
     const secEv = `<section><h1>Evidencias</h1><p class="sub">Fotos relevadas. Filtrá por local, marca y espacio.</p>${filtrosEv}</section>
           <section class="panel" id="s-gal"><div class="p-head"><i class="k-ico mut">${svg('img', 18)}</i><div><h2>Fotos</h2><p>${V.length} relevamiento${V.length === 1 ? '' : 's'} · ${lista.length} foto${lista.length === 1 ? '' : 's'}. Toca uno para verlo junto a su planograma.</p></div></div>
@@ -848,7 +858,7 @@
     const espDe = C.TIPOS.map((t) => { const it = V.filter((v) => mismoEsp(v.tipo, t.nombre)); const rc = it.filter((v) => resDe(v)).length;
       return { t, n: it.length, pc: pct(cnt(it, 'cumple'), rc), marcas: C.MARCAS.map((m) => [m, it.filter((v) => v.marca === m).length]).filter((q) => q[1]) }; });
     const secEsp = `<section><h1>Espacios</h1><p class="sub">Cumplimiento por tipo de espacio y marcas relevadas en cada uno.</p>
-            <div class="filt">${buscador}${select('pdv', 'Punto de venta', opt('pdv'))}${select('marca', 'Marca', opt('marca'))}</div></section>
+            <div class="filt">${buscador}${multiPdv()}${select('marca', 'Marca', opt('marca'))}</div></section>
           <section class="panel"><div class="esp-g">${espDe.map((e) => `<div class="esp ${e.n ? '' : 'vacio'}"><div class="esp-h"><b>${esc(e.t.nombre)}</b><em class="${tonoPct(e.pc)}">${e.pc === null ? '–' : e.pc + '%'}</em></div>
               <small>${e.n} relevamiento${e.n === 1 ? '' : 's'}</small><div class="k-bar"><b class="ok" style="width:${e.pc || 0}%"></b></div>
               <div class="chips">${e.marcas.length ? e.marcas.map(([m, k]) => `<span class="chip gry">${esc(m)} · ${k}</span>`).join('') : '<span class="mut-t">Sin relevar</span>'}</div>
@@ -869,7 +879,7 @@
         ${x.g ? `<div class="col-pl">${x.g.planos.map((p) => `<button type="button" class="col-img" data-colimg="${esc(p.url)}"><img src="${esc(p.url)}" alt="Planograma ideal ${esc(x.e)}" loading="lazy"><small>Planograma ideal</small></button>`).join('')}</div>` : ''}
         ${x.it.length ? x.it.map((v) => `<div class="pdv-row ir" data-g="${esc(v.id)}"><div class="pdv-n"><b>${esc(v.pdv)}</b><small>${esc(v.marca || '')} · ${esc(v.tipo)} · ${fmtFecha(v.ts)}</small></div><div class="pdv-p ${resDe(v) === 'cumple' ? 'ok' : resDe(v) ? 'bad' : 'mut'}">${resDe(v) ? esc(criterioDe(resDe(v)).texto) : '–'}</div></div>`).join('') : '<div class="empty">Todavía no hay relevamientos de esta colaboración.</div>'}</section>`;
     const secCol = `<section><h1>Colaboraciones</h1><p class="sub">Espacios que comparten dos o más marcas (por ejemplo Bauducco + Fini): planograma ideal y relevamientos hechos con esa colaboración.</p>
-            <div class="filt">${buscador}${select('pdv', 'Punto de venta', opt('pdv'))}${select('marca', 'Marca', opt('marca'))}</div>
+            <div class="filt">${buscador}${multiPdv()}${select('marca', 'Marca', opt('marca'))}</div>
             <div class="k-grid k4">${kpi('az', 'cmp', 'Colaboraciones', colGrupos.length)}${kpi('ok', 'foto', 'Relevamientos', colV.length)}${kpi('ok', 'cumple', 'Cumplimiento', colPc === null ? '–' : colPc + '%', colPc === null ? '' : `<div class="k-bar"><b class="ok" style="width:${colPc}%"></b></div>`)}</div></section>
           ${colGrupos.length ? colGrupos.map(panelCol).join('') : '<section class="panel"><div class="empty">Todavía no hay planogramas de colaboración cargados.</div></section>'}`;
 
@@ -884,6 +894,18 @@
         <div class="content">${vista === 'eval' ? secEval : vista === 'esp' ? secEsp : vista === 'col' ? secCol : vista === 'ev' ? secEv : vista === 'det' ? secDet : secResumen}</div></div></div>`;
 
     $app.querySelectorAll('[data-f]').forEach((el) => el.onchange = () => { f[el.dataset.f] = el.value; if (el.dataset.f === 'desde' || el.dataset.f === 'hasta') state.periodo = ''; pintarTablero(); });
+    $app.querySelectorAll('.f-multi').forEach((box) => {
+      const det = box.querySelector('details'), qi = box.querySelector('.fm-q'), lista = box.querySelector('.fm-l');
+      det.addEventListener('toggle', () => { state.pdvAbierto = det.open; });
+      qi.oninput = () => { state.pdvQ = qi.value; const w = norm(qi.value).split(/\s+/).filter(Boolean); lista.querySelectorAll('.fm-o').forEach((r) => { r.hidden = !w.every((x) => r.dataset.n.includes(x)); }); };
+      lista.onchange = (e) => { const c = e.target.closest('[data-pv]'); if (!c) return; const v = c.dataset.pv, top = lista.scrollTop;
+        f.pdvs = c.checked ? [...new Set([...f.pdvs, v])] : f.pdvs.filter((x) => x !== v);
+        pintarTablero(); const l2 = $app.querySelector('.fm-l'); if (l2) l2.scrollTop = top; };
+      box.querySelectorAll('[data-fm]').forEach((b) => b.onclick = () => {
+        if (b.dataset.fm === 'no') f.pdvs = []; else f.pdvs = [...new Set([...f.pdvs, ...[...lista.querySelectorAll('.fm-o:not([hidden]) [data-pv]')].map((x) => x.dataset.pv)])];
+        pintarTablero(); });
+    });
+    if (!window.__cierraMulti) { window.__cierraMulti = true; document.addEventListener('click', (e) => { const d = document.querySelector('.f-multi details[open]'); if (d && !d.parentElement.contains(e.target)) d.open = false; }); }
     $app.querySelectorAll('[data-p]').forEach((b) => b.onclick = () => {
       state.periodo = b.dataset.p;
       f.desde = b.dataset.p === 'hoy' ? hoy : b.dataset.p === 'mes' ? hoy.slice(0, 8) + '01' : '';

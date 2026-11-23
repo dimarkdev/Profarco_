@@ -714,3 +714,18 @@ button.k-link:focus-visible { outline: 2px solid #3cb3a8; outline-offset: 2px; }
 .esp2-b .esp2-t + .esp2-t, .esp2-o + .esp2-o { margin-top: 10px; }
 .esp2-f { display: grid; place-items: center; font-size: 20px; color: #8a9996; }
 @media (max-width: 700px) { .esp2 { grid-template-columns: 1fr; } .esp2-f { transform: rotate(90deg); height: 20px; } }
+
+/* Filtro de puntos de venta con casillas */
+.f-multi { position: relative; display: flex; flex-direction: column; gap: 3px; font-size: 11px; font-weight: 600; color: #6b7a77; }
+.f-multi summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 34px; min-width: 112px; max-width: 190px; padding: 0 10px; border: 1px solid #dde4e2; border-radius: 10px; background: #fff; font-size: 12px; font-weight: 400; color: #101a18; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.f-multi summary::-webkit-details-marker { display: none; }
+.f-multi summary::after { content: '▾'; font-size: 11px; color: #6b7a77; }
+.fm-p { position: absolute; z-index: 30; top: 58px; left: 0; width: 340px; max-width: 88vw; padding: 10px; border: 1px solid #dde4e2; border-radius: 12px; background: #fff; box-shadow: 0 10px 30px rgba(16,26,24,.14); font-weight: 400; }
+.fm-q { width: 100%; height: 34px; padding: 0 10px; border: 1px solid #dde4e2; border-radius: 10px; font-size: 12px; box-sizing: border-box; }
+.fm-a { display: flex; gap: 10px; margin: 8px 0 4px; }
+.fm-a button { border: 0; background: none; padding: 0; font-size: 12px; font-weight: 600; color: #1f9d6b; cursor: pointer; }
+.fm-l { max-height: 260px; overflow: auto; }
+.fm-o { display: flex; align-items: flex-start; gap: 8px; padding: 6px 4px; font-size: 12px; color: #101a18; cursor: pointer; border-radius: 8px; }
+.fm-o:hover { background: #f3f5f4; }
+.fm-o input { margin-top: 2px; flex: none; }
+.fm-o[hidden] { display: none !important; }
