@@ -740,7 +740,7 @@
       const ciudadDe = {}; state.pdvs.forEach((p) => { ciudadDe[p.nombre] = p.ciudad || ''; });
       return `<div class="f-multi"><span>Punto de venta</span><details ${state.pdvAbierto ? 'open' : ''}><summary>${esc(resumen)}</summary>
         <div class="fm-p"><input type="search" class="fm-q" placeholder="Escribí: biggie, real, luque…" value="${esc(state.pdvQ || '')}" autocomplete="off">
-          <div class="fm-a"><button type="button" data-fm="vis">Marcar los que se ven</button><button type="button" data-fm="no">Quitar todos</button></div>
+          <div class="fm-a"><button type="button" data-fm="vis">Seleccionar todo</button><button type="button" data-fm="no">Quitar todo</button></div>
           <div class="fm-l">${opt('pdv').map((v) => { const n = norm(v + ' ' + (cadenaDe[v] || '') + ' ' + (ciudadDe[v] || '')); return `<label class="fm-o" data-n="${esc(n)}" ${w.every((x) => n.includes(x)) ? '' : 'hidden'}><input type="checkbox" data-pv="${esc(v)}" ${sel.includes(v) ? 'checked' : ''}><span>${esc(v)}</span></label>`; }).join('')}</div></div></details></div>`;
     };
     const buscador = `<label class="f-sel f-q"><span>Buscar</span><input type="search" id="bq" placeholder="Punto de venta, cadena, marca, espacio, fecha…" value="${esc(f.q)}" autocomplete="off"></label>`;
