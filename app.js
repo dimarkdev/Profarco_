@@ -637,7 +637,9 @@
       out: '<path d="M10 5H6.5A1.5 1.5 0 005 6.5v11A1.5 1.5 0 006.5 19H10M15 8l4 4-4 4M19 12H9"/>',
     }[n] || '');
     const svg = (n, s = 20) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ico(n)}</svg>`;
-    const colDe = (v) => { const c = (v.criterios || []).find((id) => /^colab:/.test(id)); return c ? c.slice(6) : ''; };
+    // Halls siempre va con Trident: todo lo relevado en Halls cuenta en la colaboración "Trident + Halls" (usa el nombre del planograma si existe).
+    const etiqHallsTrident = (() => { const p = state.planos.map(variantePlano).find((vp) => ['halls', 'trident'].every((m) => vp.marcas.some((x) => limpiaMarca(x) === m))); return p ? p.etiqueta.replace(/ · .*/, '') : 'Trident + Halls'; })();
+    const colDe = (v) => { const c = (v.criterios || []).find((id) => /^colab:/.test(id)); return c ? c.slice(6) : (limpiaMarca(v.marca) === 'halls' ? etiqHallsTrident : ''); };
     const obsDe = (v) => { const c = (v.criterios || []).find((id) => /^obs:/.test(id)); return c ? c.slice(4) : ''; };
     const tags = (x) => (x.criterios || []).filter((id) => !/^obs:/.test(id)).map((id) => { const c = criterioDe(id); return `<span class="badge ${c.tono || ''}">${esc(c.texto)}</span>`; }).join('');
 
