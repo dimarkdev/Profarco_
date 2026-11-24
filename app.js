@@ -58,8 +58,9 @@
     el.className = grande ? 'lb grande' : 'lb';
     let k = Math.max(0, Math.min(items.length - 1, inicio || 0));
     const cerrar = () => { document.removeEventListener('keydown', tecla); el.remove(); };
-    // Zoom por porcentaje (botones fijos, centrado): no depende de donde este el puntero. Con zoom, la foto se mueve arrastrandola.
-    const NIVELES = [100, 125, 150, 200, 300, 400];
+    // Zoom clasico: rueda del mouse o touchpad (pellizco) sobre la foto, centrado en el puntero; arrastrar mueve la foto; doble clic restablece.
+    // Solo se amplia la foto (la pagina no): la rueda se atrapa dentro del visor. El porcentaje actual se muestra arriba.
+    const ZMIN = 100, ZMAX = 600;
     let z = 100, px = 0, py = 0;
     const aplicarZoom = () => {
       const fr = el.querySelector('.lb-frame'); if (!fr || !fr.classList.contains('zm')) return;
@@ -67,35 +68,65 @@
       px = Math.min(mx, Math.max(-mx, px)); py = Math.min(my, Math.max(-my, py));
       fr.firstElementChild.style.transform = z === 100 ? '' : `translate(${px}px, ${py}px) scale(${z / 100})`;
       fr.classList.toggle('on', z > 100);
-      const v = el.querySelector('[data-zv]'); if (v) v.textContent = z + '%';
-      el.querySelectorAll('[data-z]').forEach((b) => b.classList.toggle('sel', +b.dataset.z === z));
+      const v = el.querySelector('[data-zv]'); if (v) v.textContent = Math.round(z) + '%';
     };
-    const fijarZoom = (nuevo) => { z = Math.min(400, Math.max(100, nuevo)); if (z === 100) { px = 0; py = 0; } aplicarZoom(); };
+    // Cambia el zoom manteniendo fijo el punto (cx, cy) medido desde el centro del recuadro.
+    const zoomEn = (nuevo, cx, cy) => {
+      const z2 = Math.min(ZMAX, Math.max(ZMIN, nuevo)), r = z2 / z;
+      px = cx - (cx - px) * r; py = cy - (cy - py) * r; z = z2;
+      if (z === 100) { px = 0; py = 0; }
+      aplicarZoom();
+    };
+    const centroDe = (fr, x, y) => { const b = fr.getBoundingClientRect(); return [x - (b.left + b.width / 2), y - (b.top + b.height / 2)]; };
     const pintar = () => {
       const i = items[k], n = items.length;
       z = 100; px = 0; py = 0;
-      const ZOOM = grande ? '' : `<div class="lb-zoom" aria-label="Zoom"><button type="button" data-zs="-1" aria-label="Alejar">−</button>${NIVELES.map((p) => `<button type="button" data-z="${p}"${p === 100 ? ' class="sel"' : ''}>${p}%</button>`).join('')}<button type="button" data-zs="1" aria-label="Acercar">+</button><span class="v" data-zv>100%</span></div>`;
-      el.innerHTML = `<div class="lb-head"><span class="t">${n > 1 ? `${k + 1} / ${n} · ` : ''}${grande ? 'Toca fuera de la foto para cerrar' : 'Zoom con los botones · arrastra la foto para moverla'}${n > 1 ? ' · flechas ← → para cambiar' : ''}</span>${girar && !i.fijo ? BTN_GIRO(i.url) : ''}<button class="lb-x" data-x aria-label="Cerrar">×</button></div>${ZOOM}
+      const ZOOM = grande ? '' : `<div class="lb-zoom" aria-label="Zoom"><button type="button" data-zs="-1" aria-label="Alejar">−</button><span class="v" data-zv>100%</span><button type="button" data-zs="1" aria-label="Acercar">+</button><button type="button" data-z0>Restablecer</button></div>`;
+      el.innerHTML = `<div class="lb-head"><span class="t">${n > 1 ? `${k + 1} / ${n} · ` : ''}${grande ? 'Toca fuera de la foto para cerrar' : 'Rueda del mouse o touchpad para zoom · arrastra para mover · doble clic restablece'}${n > 1 ? ' · flechas ← → para cambiar' : ''}</span>${girar && !i.fijo ? BTN_GIRO(i.url) : ''}<button class="lb-x" data-x aria-label="Cerrar">×</button></div>${ZOOM}
         <div class="lb-body"><figure><div class="lb-frame ${grande ? '' : 'zm'}"><div class="lb-pan"><img src="${esc(i.url)}" alt=""></div></div>${i.caption ? `<div>${esc(i.caption)}</div>` : ''}${i.tags ? `<div class="lb-tags">${i.tags}</div>` : ''}</figure></div>
         ${n > 1 ? '<button class="lb-n l" data-n="-1" aria-label="Anterior">‹</button><button class="lb-n r" data-n="1" aria-label="Siguiente">›</button>' : ''}`;
       if (girar && !i.fijo) rotAplicar(el.querySelector('img'), rotLeer(i.url));
     };
     const ir = (d) => { if (items.length > 1) { k = (k + d + items.length) % items.length; pintar(); } };
-    function tecla(e) { if (e.key === 'ArrowRight') ir(1); else if (e.key === 'ArrowLeft') ir(-1); else if (e.key === 'Escape') cerrar(); }
-    // Arrastrar la foto ampliada (el zoom no sigue al puntero: solo se mueve al arrastrar).
-    let arr = null;
+    function tecla(e) {
+      if (e.key === 'ArrowRight') ir(1); else if (e.key === 'ArrowLeft') ir(-1); else if (e.key === 'Escape') cerrar();
+      else if (!grande && (e.key === '+' || e.key === '=')) zoomEn(z * 1.25, 0, 0);
+      else if (!grande && (e.key === '-' || e.key === '_')) zoomEn(z * 0.8, 0, 0);
+      else if (!grande && e.key === '0') { z = 100; px = 0; py = 0; aplicarZoom(); }
+    }
+    // Rueda / pellizco del touchpad (llega como rueda con Ctrl): zoom en el puntero, sin tocar el zoom de la pagina.
+    el.addEventListener('wheel', (e) => {
+      e.preventDefault();   // evita que la pagina haga zoom o scroll detras del visor
+      const fr = e.target.closest && e.target.closest('.lb-frame.zm'); if (!fr) return;
+      const dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
+      const [cx, cy] = centroDe(fr, e.clientX, e.clientY);
+      zoomEn(z * Math.exp(-dy * (e.ctrlKey ? 0.01 : 0.002)), cx, cy);
+    }, { passive: false });
+    // Arrastrar mueve la foto ampliada; con dos dedos (pantalla tactil) se hace zoom pellizcando.
+    const dedos = new Map(); let pinza = null;
     el.addEventListener('pointerdown', (e) => {
-      const fr = e.target.closest && e.target.closest('.lb-frame.on'); if (!fr) return;
-      arr = { x: e.clientX, y: e.clientY, px, py, pan: fr.firstElementChild }; arr.pan.style.transition = 'none';
+      const fr = e.target.closest && e.target.closest('.lb-frame.zm'); if (!fr) return;
+      dedos.set(e.pointerId, { x: e.clientX, y: e.clientY });
       try { fr.setPointerCapture(e.pointerId); } catch (_) { /* sin captura */ }
+      fr.firstElementChild.style.transition = 'none';
+      if (dedos.size === 2) { const [a, b] = [...dedos.values()]; pinza = { d: Math.hypot(a.x - b.x, a.y - b.y), z }; }
     });
-    el.addEventListener('pointermove', (e) => { if (!arr) return; px = arr.px + e.clientX - arr.x; py = arr.py + e.clientY - arr.y; aplicarZoom(); });
-    const soltar = () => { if (arr) { arr.pan.style.transition = ''; arr = null; } };
+    el.addEventListener('pointermove', (e) => {
+      const p = dedos.get(e.pointerId); if (!p) return;
+      const fr = el.querySelector('.lb-frame'); const dx = e.clientX - p.x, dy = e.clientY - p.y;
+      p.x = e.clientX; p.y = e.clientY;
+      if (dedos.size === 2 && pinza) {
+        const [a, b] = [...dedos.values()]; const [cx, cy] = centroDe(fr, (a.x + b.x) / 2, (a.y + b.y) / 2);
+        zoomEn(pinza.z * Math.hypot(a.x - b.x, a.y - b.y) / pinza.d, cx, cy);
+      } else if (dedos.size === 1 && z > 100) { px += dx; py += dy; aplicarZoom(); }
+    });
+    const soltar = (e) => { dedos.delete(e.pointerId); pinza = null; if (!dedos.size) { const pan = el.querySelector('.lb-pan'); if (pan) pan.style.transition = ''; } };
     el.addEventListener('pointerup', soltar); el.addEventListener('pointercancel', soltar);
+    el.addEventListener('dblclick', (e) => { if (e.target.closest('.lb-frame.zm')) { z = 100; px = 0; py = 0; aplicarZoom(); } });
     el.addEventListener('click', (e) => {
-      const zb = e.target.closest('[data-z]'); if (zb) { fijarZoom(+zb.dataset.z); return; }
+      if (e.target.closest('[data-z0]')) { z = 100; px = 0; py = 0; aplicarZoom(); return; }
       const zs = e.target.closest('[data-zs]');
-      if (zs) { const sig = +zs.dataset.zs > 0 ? NIVELES.find((p) => p > z) : [...NIVELES].reverse().find((p) => p < z); fijarZoom(sig || (+zs.dataset.zs > 0 ? 400 : 100)); return; }
+      if (zs) { zoomEn(z * (+zs.dataset.zs > 0 ? 1.25 : 0.8), 0, 0); return; }
       const r = e.target.closest('[data-rot]');
       if (r) { const url = r.parentElement.dataset.url, d = (((rotLeer(url) + +r.dataset.rot) % 360) + 360) % 360; rotGuardar(url, d); rotAplicar(el.querySelector('img'), d); return; }
       const b = e.target.closest('[data-n]');
