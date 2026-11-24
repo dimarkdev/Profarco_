@@ -58,23 +58,44 @@
     el.className = grande ? 'lb grande' : 'lb';
     let k = Math.max(0, Math.min(items.length - 1, inicio || 0));
     const cerrar = () => { document.removeEventListener('keydown', tecla); el.remove(); };
+    // Zoom por porcentaje (botones fijos, centrado): no depende de donde este el puntero. Con zoom, la foto se mueve arrastrandola.
+    const NIVELES = [100, 125, 150, 200, 300, 400];
+    let z = 100, px = 0, py = 0;
+    const aplicarZoom = () => {
+      const fr = el.querySelector('.lb-frame'); if (!fr || !fr.classList.contains('zm')) return;
+      const mx = (z / 100 - 1) * fr.clientWidth / 2, my = (z / 100 - 1) * fr.clientHeight / 2;
+      px = Math.min(mx, Math.max(-mx, px)); py = Math.min(my, Math.max(-my, py));
+      fr.firstElementChild.style.transform = z === 100 ? '' : `translate(${px}px, ${py}px) scale(${z / 100})`;
+      fr.classList.toggle('on', z > 100);
+      const v = el.querySelector('[data-zv]'); if (v) v.textContent = z + '%';
+      el.querySelectorAll('[data-z]').forEach((b) => b.classList.toggle('sel', +b.dataset.z === z));
+    };
+    const fijarZoom = (nuevo) => { z = Math.min(400, Math.max(100, nuevo)); if (z === 100) { px = 0; py = 0; } aplicarZoom(); };
     const pintar = () => {
       const i = items[k], n = items.length;
-      el.innerHTML = `<div class="lb-head"><span class="t">${n > 1 ? `${k + 1} / ${n} · ` : ''}${grande ? 'Toca fuera de la foto para cerrar' : 'Toca la foto para acercar'}${n > 1 ? ' · flechas ← → para cambiar' : ''}</span>${girar && !i.fijo ? BTN_GIRO(i.url) : ''}<button class="lb-x" data-x aria-label="Cerrar">×</button></div>
+      z = 100; px = 0; py = 0;
+      const ZOOM = grande ? '' : `<div class="lb-zoom" aria-label="Zoom"><button type="button" data-zs="-1" aria-label="Alejar">−</button>${NIVELES.map((p) => `<button type="button" data-z="${p}"${p === 100 ? ' class="sel"' : ''}>${p}%</button>`).join('')}<button type="button" data-zs="1" aria-label="Acercar">+</button><span class="v" data-zv>100%</span></div>`;
+      el.innerHTML = `<div class="lb-head"><span class="t">${n > 1 ? `${k + 1} / ${n} · ` : ''}${grande ? 'Toca fuera de la foto para cerrar' : 'Zoom con los botones · arrastra la foto para moverla'}${n > 1 ? ' · flechas ← → para cambiar' : ''}</span>${girar && !i.fijo ? BTN_GIRO(i.url) : ''}<button class="lb-x" data-x aria-label="Cerrar">×</button></div>${ZOOM}
         <div class="lb-body"><figure><div class="lb-frame ${grande ? '' : 'zm'}"><div class="lb-pan"><img src="${esc(i.url)}" alt=""></div></div>${i.caption ? `<div>${esc(i.caption)}</div>` : ''}${i.tags ? `<div class="lb-tags">${i.tags}</div>` : ''}</figure></div>
         ${n > 1 ? '<button class="lb-n l" data-n="-1" aria-label="Anterior">‹</button><button class="lb-n r" data-n="1" aria-label="Siguiente">›</button>' : ''}`;
       if (girar && !i.fijo) rotAplicar(el.querySelector('img'), rotLeer(i.url));
     };
     const ir = (d) => { if (items.length > 1) { k = (k + d + items.length) % items.length; pintar(); } };
     function tecla(e) { if (e.key === 'ArrowRight') ir(1); else if (e.key === 'ArrowLeft') ir(-1); else if (e.key === 'Escape') cerrar(); }
-    // Zoom dentro del recuadro: la foto se amplia sin salirse de el y sigue al dedo / mouse.
-    const mover = (e) => {
+    // Arrastrar la foto ampliada (el zoom no sigue al puntero: solo se mueve al arrastrar).
+    let arr = null;
+    el.addEventListener('pointerdown', (e) => {
       const fr = e.target.closest && e.target.closest('.lb-frame.on'); if (!fr) return;
-      const r = fr.getBoundingClientRect();
-      fr.firstElementChild.style.transformOrigin = `${Math.min(100, Math.max(0, (e.clientX - r.left) / r.width * 100))}% ${Math.min(100, Math.max(0, (e.clientY - r.top) / r.height * 100))}%`;
-    };
-    el.addEventListener('pointermove', mover);
+      arr = { x: e.clientX, y: e.clientY, px, py, pan: fr.firstElementChild }; arr.pan.style.transition = 'none';
+      try { fr.setPointerCapture(e.pointerId); } catch (_) { /* sin captura */ }
+    });
+    el.addEventListener('pointermove', (e) => { if (!arr) return; px = arr.px + e.clientX - arr.x; py = arr.py + e.clientY - arr.y; aplicarZoom(); });
+    const soltar = () => { if (arr) { arr.pan.style.transition = ''; arr = null; } };
+    el.addEventListener('pointerup', soltar); el.addEventListener('pointercancel', soltar);
     el.addEventListener('click', (e) => {
+      const zb = e.target.closest('[data-z]'); if (zb) { fijarZoom(+zb.dataset.z); return; }
+      const zs = e.target.closest('[data-zs]');
+      if (zs) { const sig = +zs.dataset.zs > 0 ? NIVELES.find((p) => p > z) : [...NIVELES].reverse().find((p) => p < z); fijarZoom(sig || (+zs.dataset.zs > 0 ? 400 : 100)); return; }
       const r = e.target.closest('[data-rot]');
       if (r) { const url = r.parentElement.dataset.url, d = (((rotLeer(url) + +r.dataset.rot) % 360) + 360) % 360; rotGuardar(url, d); rotAplicar(el.querySelector('img'), d); return; }
       const b = e.target.closest('[data-n]');
@@ -82,7 +103,6 @@
       if (e.target.closest('[data-x]')) { cerrar(); return; }
       const fr = e.target.closest('.lb-frame');
       if (!fr) { if (grande) cerrar(); return; }
-      if (fr.classList.contains('zm')) { fr.classList.toggle('on'); mover(e); fr.firstElementChild.style.transform = fr.classList.contains('on') ? 'scale(2.2)' : ''; }
     });
     document.addEventListener('keydown', tecla);
     pintar();

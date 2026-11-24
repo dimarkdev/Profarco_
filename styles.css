@@ -225,7 +225,12 @@ td.c, th.c { text-align: center; }
 .lb-body figure { flex: 1; min-width: 0; text-align: center; color: rgba(255,255,255,.75); font-size: 12px; }
 .lb-body img { max-width: 100%; max-height: calc(100vh - 170px); object-fit: contain; border-radius: var(--r-sm); }
 .lb-frame { width: min(94vw, 1000px); height: calc(100vh - 200px); margin: 0 auto; overflow: hidden; position: relative; border-radius: var(--r-sm); touch-action: none; }
-.lb-frame.zm { cursor: zoom-in; } .lb-frame.zm.on { cursor: zoom-out; }
+.lb-frame.zm.on { cursor: grab; } .lb-frame.zm.on:active { cursor: grabbing; }
+.lb-zoom { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; padding: 0 12px 8px; }
+.lb-zoom button { min-width: 40px; height: 34px; padding: 0 10px; border: 1px solid rgba(255,255,255,.35); border-radius: 999px; background: rgba(255,255,255,.14); color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; }
+.lb-zoom button:hover { background: rgba(255,255,255,.28); }
+.lb-zoom button.sel { background: #3cb3a8; border-color: #3cb3a8; color: #08101e; }
+.lb-zoom .v { min-width: 48px; text-align: center; color: #fff; font-size: 13px; font-weight: 700; }
 .lb-pan { width: 100%; height: 100%; transition: transform .15s; }
 .lb-body .lb-frame img { display: block; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: contain; transition: transform .2s; transform-origin: center; }
 .lb-head .rot { flex: none; }
