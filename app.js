@@ -560,7 +560,16 @@
   async function conPin(siguiente, ambito) {
     const clave = 'pin-' + ambito;
     const valida = async (p) => { try { return await S.verificarPin(p, ambito); } catch (e) { toast(e.message); return null; } };  // null: bloqueado por intentos
-    const guardada = localStorage.getItem(clave) || sessionStorage.getItem(clave);   // 'Recordarme en este dispositivo' usa localStorage
+    // 'Recordarme en este dispositivo' usa localStorage y vence a los 25 dias (una clave guardada antes de este control empieza a contar desde hoy).
+    const VENCE = 25 * 24 * 3600 * 1000;
+    try {
+      if (localStorage.getItem(clave)) {
+        const desde = Number(localStorage.getItem(clave + '-ts'));
+        if (!desde) localStorage.setItem(clave + '-ts', String(Date.now()));
+        else if (Date.now() - desde > VENCE) { localStorage.removeItem(clave); localStorage.removeItem(clave + '-ts'); }
+      }
+    } catch (e) { /* sin almacenamiento */ }
+    const guardada = localStorage.getItem(clave) || sessionStorage.getItem(clave);
     if (guardada) {
       const v = await valida(guardada);
       if (v || (v === null && state.datos)) return siguiente(guardada);   // bloqueado con el tablero ya abierto: se conserva lo que se ve
@@ -590,7 +599,7 @@
         <p class="pin-tag">${ambito === 'admin' ? 'Administración<br>de planogramas' : 'Plataforma de ejecución<br>en punto de venta'}</p>
         <label class="pin-lab" for="pin">Clave de acceso</label>
         <div class="pin-in">${icoLock}<input id="pin" type="password" autocomplete="off" placeholder="Ingresa tu clave"><button type="button" class="ojo" id="ojo" aria-label="Mostrar u ocultar clave">${icoOjo}</button></div>
-        <label class="pin-rec"><input type="checkbox" id="rec" checked> Recordarme en este dispositivo</label>
+        <label class="pin-rec"><input type="checkbox" id="rec" ${ambito === 'admin' ? '' : 'checked'}> Recordarme en este dispositivo</label>
         <p class="pin-err" id="err"></p>
         <button class="pin-btn" id="ok">Iniciar sesión <span aria-hidden="true">→</span></button>
       </div><p class="pin-foot">© 2026 +MARKA. Todos los derechos reservados.</p></div>`;
@@ -601,6 +610,7 @@
         const rec = document.getElementById('rec').checked;
         (rec ? localStorage : sessionStorage).setItem(clave, pin);
         (rec ? sessionStorage : localStorage).removeItem(clave);
+        if (rec) localStorage.setItem(clave + '-ts', String(Date.now())); else localStorage.removeItem(clave + '-ts');
         document.body.classList.remove('login-pin'); siguiente(pin);
       }
       else if (ok === false) document.getElementById('err').textContent = 'Clave incorrecta';
