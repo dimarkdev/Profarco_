@@ -68,12 +68,12 @@ window.CONFIG = {
   PREGUNTAS: [
     { id: 'presente', corto: 'Marca en el espacio', titulo: '¿Se encuentra la marca en el espacio designado?', opciones: [
       { id: 'presente_si', texto: 'Sí, se encuentra.', tono: 'ok' },
-      { id: 'presente_no', texto: 'No, no se encontró.', tono: 'bad' } ] },
+      { id: 'presente_no', texto: 'No, no se encontró.', tono: 'bad', omite: ['visib', 'estado'] } ] },   // si la marca no está, no se pregunta visibilidad ni estado del mueble (solo interesan los muebles de la marca auditada)
     { id: 'ocupa', corto: 'Ocupa el espacio', numero: 1, si: 'presente_no', titulo: 'Si la marca contratada no está, ¿qué ocupa el espacio?',
       nota: 'Aplica solo cuando la marca contratada no está en el espacio.', opciones: [
       { id: 'ocupa_profarco', texto: 'Otra marca de Profarco', tono: 'warn' },
-      { id: 'ocupa_otra', texto: 'Otra marca (no Profarco)', tono: 'bad' },
-      { id: 'ocupa_propia', texto: 'Marca propia o producto del supermercado', tono: 'bad' },
+      { id: 'ocupa_otra', texto: 'Otra marca (no Profarco)', tono: 'bad', omite: ['abast'] },   // nada de Profarco: no interesa saber mas
+      { id: 'ocupa_propia', texto: 'Marca propia o producto del supermercado', tono: 'bad', omite: ['abast'] },
       { id: 'ocupa_material', texto: 'Material sin producto', tono: 'warn', omite: ['abast', 'visib'] },   // sin producto no hay abastecimiento ni visibilidad que valorar
       { id: 'ocupa_vacio', texto: 'Vacío', tono: 'bad', omite: ['abast', 'visib'] } ] },
     { id: 'abast', corto: 'Abastecimiento', numero: 2, titulo: 'Nivel de abastecimiento del espacio', opciones: [

@@ -22,6 +22,13 @@
   // "No se encontro el espacio": solo en supermercados y mayoristas; los puntos Biggie no lo muestran.
   const esBiggie = (pdv) => { const p = ((state.usuario && state.usuario.pdvs) || []).find((x) => x.nombre === pdv); return /^\s*biggie/i.test(pdv || '') || /biggie/i.test((p && p.cadena) || ''); };
   const tiposEsperados = (pdv, marca) => C.TIPOS.filter((t) => esperado(pdv, marca, t));
+  // Respuestas que cuentan de un registro: descarta las de preguntas que no aplican (p. ej. si la marca no estaba, no importan visibilidad ni estado del mueble), tambien en registros viejos.
+  const critAplica = (crit) => {
+    const c = crit || [];
+    const omitidas = new Set(C.PREGUNTAS.flatMap((q) => q.opciones.filter((o) => c.includes(o.id) && o.omite).flatMap((o) => o.omite)));
+    const fuera = new Set(C.PREGUNTAS.filter((q) => omitidas.has(q.id)).flatMap((q) => q.opciones.map((o) => o.id)));
+    return c.filter((id) => !fuera.has(id));
+  };
   const criterioDe = (id) => C.CRITERIOS.find((c) => c.id === id) || (/^colab:/.test(id) ? { id, texto: 'Colaboración: ' + id.slice(6), tono: 'ok' } : /^obs:/.test(id) ? { id, texto: 'Observación: ' + id.slice(4), tono: 'warn' } : { id, texto: id });
   const guardado = (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
   const ICON_BACK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>';
@@ -692,7 +699,7 @@
     const etiqHallsTrident = (() => { const p = state.planos.map(variantePlano).find((vp) => ['halls', 'trident'].every((m) => vp.marcas.some((x) => limpiaMarca(x) === m))); return p ? p.etiqueta.replace(/ · .*/, '') : 'Trident + Halls'; })();
     const colDe = (v) => { const c = (v.criterios || []).find((id) => /^colab:/.test(id)); return c ? c.slice(6) : (limpiaMarca(v.marca) === 'halls' ? etiqHallsTrident : ''); };
     const obsDe = (v) => { const c = (v.criterios || []).find((id) => /^obs:/.test(id)); return c ? c.slice(4) : ''; };
-    const tags = (x) => (x.criterios || []).filter((id) => !/^obs:/.test(id)).map((id) => { const c = criterioDe(id); return `<span class="badge ${c.tono || ''}">${esc(c.texto)}</span>`; }).join('');
+    const tags = (x) => critAplica(x.criterios).filter((id) => !/^obs:/.test(id) && !['cumple', 'no_cumple', 'parcial'].includes(id)).map((id) => { const c = criterioDe(id); return `<span class="badge ${c.tono || ''}">${esc(c.etiqueta || c.texto)}</span>`; }).join('');   // con el nombre de la pregunta ("Ocupa el espacio: Vacío") para que se entienda
 
     // ── Indicadores ──
     const n = V.length, c = cnt(V, 'cumple'), p = cnt(V, 'parcial'), nc = cnt(V, 'no_cumple'), sin = n - c - p - nc;
@@ -741,7 +748,7 @@
 
     // ── Evaluación: planograma vs foto auditada ──
     // Al abrir (sin elegir una foto) se muestra primero una góndola ideal: todo favorable y con planograma de referencia; si no hay, una que cumple, y si no, la primera.
-    const todoFav = (v) => !C.PREGUNTAS.some((q) => { const o = q.opciones.find((x) => (v.criterios || []).includes(x.id)); return o && o.tono !== 'ok'; });
+    const todoFav = (v) => !C.PREGUNTAS.some((q) => { const o = q.opciones.find((x) => critAplica(v.criterios).includes(x.id)); return o && o.tono !== 'ok'; });
     const conRef = (v) => { const t = tipoDe(v.tipo); return !!(t && planosDe(v.pdv, v.marca, t.id).length); };
     const elegida = V.findIndex((v) => v.fotos.some((x) => x.id === state.sel));
     const idx = elegida >= 0 ? elegida : Math.max(0, [(v) => resDe(v) === 'cumple' && todoFav(v) && conRef(v), (v) => resDe(v) === 'cumple' && conRef(v), (v) => conRef(v)].reduce((r, fn) => (r >= 0 ? r : V.findIndex(fn)), -1));
@@ -749,13 +756,12 @@
     let cmp = '<div class="empty">Aún no hay fotos para comparar con estos filtros.</div>', tituloEval = 'Evaluación de góndola';
     const carData = {};
     if (sel) {
-      const t = tipoDe(sel.tipo), refs = t ? planosDe(sel.pdv, sel.marca, t.id) : [], r = resDe(sel), crit = sel.criterios || [];
+      const t = tipoDe(sel.tipo), refs = t ? planosDe(sel.pdv, sel.marca, t.id) : [], r = resDe(sel), crit = critAplica(sel.criterios);
       const ini = Math.max(0, sel.fotos.findIndex((x) => x.id === state.sel));
       carData.ref = refs.map((q) => q.url); carData.foto = sel.fotos.map((x) => x.url);
       const resp = C.PREGUNTAS.map((q) => { const o = q.opciones.find((x) => crit.includes(x.id)); return o ? { q, o } : null; }).filter(Boolean);
       const neg = resp.filter((r) => r.o.tono !== 'ok');
       tituloEval = `Evaluación de góndola · ${esc(sel.pdv)}${sel.marca ? ' · ' + esc(sel.marca) : ''}`;
-      const resChip = r ? `<span class="chip res ${criterioDe(r).tono}">${svg(r === 'cumple' ? 'cumple' : r === 'parcial' ? 'warn' : 'bad', 15)}${esc(criterioDe(r).texto)}</span>` : '<span class="chip gry">Sin resultado registrado</span>';
       const chipResp = (r) => `<span class="chip ${r.o.tono === 'bad' ? 'red' : r.o.tono === 'warn' ? 'org' : 'grn'}"><b>${esc(r.q.corto)}:</b> ${esc(r.o.texto)}</span>`;
       const resumen = `${sel.marca ? sel.marca + ' · ' : ''}${sel.tipo} en ${sel.pdv}: ${r ? criterioDe(r).texto.toLowerCase() : 'sin resultado registrado'}. ` +
         (neg.length ? `Observaciones: ${neg.map((x) => x.q.corto.toLowerCase() + ' (' + x.o.texto.toLowerCase() + ')').join('; ')}.` : 'Todas las respuestas fueron favorables.') + (obsDe(sel) ? ` Observación del relevador: ${obsDe(sel)}` : '');
@@ -775,7 +781,7 @@
         </div>
         <div class="cmp-t"><span>Análisis de cumplimiento</span></div>
         <div class="an">
-          <div class="an-a"><div class="an-l">Resultado de visita</div>${resChip}${colDe(sel) ? `<span class="chip gry">Colaboración: ${esc(colDe(sel))}</span>` : ''}</div>
+          ${colDe(sel) ? `<div class="an-a"><div class="an-l">Colaboración</div><span class="chip gry">Colaboración: ${esc(colDe(sel))}</span></div>` : ''}
           <div class="an-b"><div class="an-l">Hallazgos detectados</div><div class="chips">${resp.map(chipResp).join('')}</div></div>
           <div class="an-c"><div class="an-l">Resumen del relevamiento</div><div class="an-box">${esc(resumen)}</div></div>
         </div>`;
@@ -865,7 +871,7 @@
           <section class="panel" id="s-ana"><div class="p-head"><i class="k-ico warn">${svg('flag', 18)}</i><div><h2>Análisis de góndolas</h2><p>${n} góndola${n === 1 ? '' : 's'} auditada${n === 1 ? '' : 's'} con los filtros elegidos</p></div></div>
             <div class="fn-res"><span class="chip res ok">Cumple · ${c}</span><span class="chip res bad">No cumple · ${nc}</span>${sin ? `<span class="chip gry">Sin resultado · ${sin}</span>` : ''}<span class="fn-pct">${pctCumple === null ? '–' : pctCumple + '%'} cumple</span>${marcasR.map((z) => `<span class="fn-m">${esc(z.m)} <em class="${tonoPct(z.pc)}">${z.pc === null ? '–' : z.pc + '%'}</em></span>`).join('')}</div>
             <div class="an2">${C.PREGUNTAS.map((q) => {
-              const ops = q.opciones.map((o) => { const it = V.filter((v) => (v.criterios || []).includes(o.id)); return { o, n: it.length, pdvs: [...new Set(it.map((v) => v.pdv))].sort((u, w) => u.localeCompare(w)) }; });
+              const ops = q.opciones.map((o) => { const it = V.filter((v) => critAplica(v.criterios).includes(o.id)); return { o, n: it.length, pdvs: [...new Set(it.map((v) => v.pdv))].sort((u, w) => u.localeCompare(w)) }; });
               const tot = ops.reduce((t, r) => t + r.n, 0); if (!tot) return '';
               const col = { ok: '#22a447', warn: '#d89b14', bad: '#d64545' };
               return `<div class="an2-c"><h3>${esc(q.corto)}</h3><small class="an2-q">${esc(q.titulo || '')}</small>
@@ -881,9 +887,9 @@
     const VD = agrupar(detFotos);
     const dc = cnt(VD, 'cumple'), dp = cnt(VD, 'parcial'), dn = cnt(VD, 'no_cumple'), dpc = pct(dc, dc + dp + dn);
     const visitaHtml = (v) => {
-      const r = resDe(v), crit = v.criterios || [];
+      const r = resDe(v), crit = critAplica(v.criterios);
       const resp = C.PREGUNTAS.map((q) => { const o = q.opciones.find((x) => crit.includes(x.id)); return o ? { q, o } : null; }).filter(Boolean);
-      return `<div class="vis"><div class="vis-h"><div><b>${esc(v.marca || '')} · ${esc(v.tipo)}</b><small>${fmtFecha(v.ts)}</small></div>${r ? `<span class="chip res ${criterioDe(r).tono}">${esc(criterioDe(r).texto)}</span>` : '<span class="chip gry">Sin resultado</span>'}</div>
+      return `<div class="vis"><div class="vis-h"><div><b>${esc(v.marca || '')} · ${esc(v.tipo)}</b><small>${fmtFecha(v.ts)}</small></div></div>
         <div class="chips">${resp.map((q) => `<span class="chip ${q.o.tono === 'bad' ? 'red' : q.o.tono === 'warn' ? 'org' : 'grn'}"><b>${esc(q.q.corto)}:</b> ${esc(q.o.texto)}</span>`).join('')}</div>${obsDe(v) ? `<p class="muted" style="margin:8px 0 0"><b>Observación:</b> ${esc(obsDe(v))}</p>` : ''}</div>`;
     };
     const secDet = `<section><h1>Detalle de punto de venta</h1><p class="sub">Resultados, fotos y evidencias de cada visita.</p>
