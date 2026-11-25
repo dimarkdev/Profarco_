@@ -301,6 +301,19 @@ body.login-pin .top { display: none; }
 .pin-rec input { width: 16px; height: 16px; accent-color: #2a9d8f; }
 .pin-olv { display: block; margin: 10px 0 0; padding: 0; border: 0; background: none; color: #0f5c55; font-size: 12px; font-weight: 600; }
 .pin-err { min-height: 16px; margin: 8px 0 10px; }
+/* Al validar la clave y cargar el tablero: todo se difumina y la animacion +MARKA corre encima de la tarjeta. */
+.pin-bg, .pin-card, .pin-foot { transition: filter .35s ease; }
+body.pin-carga .pin-bg { filter: blur(4px); }
+.pin-wrap.cargando .pin-card, .pin-wrap.cargando .pin-foot { filter: blur(7px); pointer-events: none; user-select: none; }
+.pin-ld { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; animation: pin-ld-in .3s ease both; }
+.pin-ld .ld { min-height: 0; }
+/* Al recargar con la sesion abierta: la pantalla que se estaba viendo queda borrosa y la animacion corre encima. */
+body.recarga > *:not(.recarga-ld) { filter: blur(10px); pointer-events: none; user-select: none; }
+.recarga-ld { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; background: rgba(255, 255, 255, .6); animation: pin-ld-in .3s ease both; }
+.recarga-ld .ld { min-height: 0; }
+body.recarga img:not([src^="img/"]) { visibility: hidden; }   /* sin fotos de relevamiento: solo la estructura del tablero (el logo y los iconos propios se ven) */
+@keyframes pin-ld-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .pin-ld { animation: none; } }
 
 /* ── Tablero (cliente): barra lateral + panel ── */
 body.dash { background: #f4f6f5; }
@@ -527,7 +540,7 @@ body.dash .g-item.on { border-color: #3cb3a8; box-shadow: 0 0 0 3px rgba(60,179,
 /* Cargador +MARKA: cubo que salta de simbolo en simbolo */
 .ld { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 60vh; text-align: center; color: #5d6d6a; font-size: 13px; }
 .ld-w { --w: 1.15em; --t: 3.6s; position: relative; display: flex; padding-top: .8em; font-size: clamp(1.8rem, 6vw, 2.5rem); font-weight: 800; letter-spacing: -.02em; line-height: 1; }
-.ld p { margin: 0; }
+.ld p { margin: 0; display: none; }   /* solo la animacion; el texto queda en aria-label para lectores de pantalla */
 .ld-w span { width: var(--w); text-align: center; color: #c5d1ce; animation: ld-glyph var(--t) infinite; animation-delay: calc(var(--i) * var(--t) / 6 - var(--t) / 12); }
 .ld-cx { position: absolute; top: 0; left: 0; width: var(--w); height: .5em; display: grid; place-items: center; animation: ld-x var(--t) infinite; }
 .ld-cy { animation: ld-y calc(var(--t) / 6) infinite; }

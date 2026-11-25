@@ -570,10 +570,16 @@
       }
     } catch (e) { /* sin almacenamiento */ }
     const guardada = localStorage.getItem(clave) || sessionStorage.getItem(clave);
+    // Clave recordada: no se muestra la pantalla de clave. Si hay copia de lo ultimo que se vio, esa pantalla queda borrosa con la animacion encima; si no, solo la animacion.
+    const quitarCarga = () => { document.body.classList.remove('recarga'); document.querySelector('.recarga-ld')?.remove(); };
+    const descartarPrevia = () => { quitarCarga(); if (state.vistaPrevia) { state.vistaPrevia = false; state.datos = null; $app.innerHTML = ''; document.body.classList.remove('dash'); } try { sessionStorage.removeItem('tablero-previa'); } catch (e) { /* nada */ } };
     if (guardada) {
+      if (state.vistaPrevia) { document.body.classList.add('recarga'); document.body.insertAdjacentHTML('beforeend', `<div class="recarga-ld">${cargador('Cargando, aguarde un momento...')}</div>`); }
+      else $app.innerHTML = cargador('Cargando, aguarde un momento...');
       const v = await valida(guardada);
-      if (v || (v === null && state.datos)) return siguiente(guardada);   // bloqueado con el tablero ya abierto: se conserva lo que se ve
-    }
+      if (v || (v === null && state.datos)) { await siguiente(guardada); quitarCarga(); return; }   // bloqueado con el tablero ya abierto: se conserva lo que se ve
+      descartarPrevia();   // la clave guardada ya no vale: se pide de nuevo
+    } else if (state.vistaPrevia) descartarPrevia();
     // Ingreso: tarjeta clara sobre fondo con cuadros flotantes
     // Tres capas: al fondo cuadros grandes y borrosos (hacia el centro), en medio translucidos y adelante opacos (algunos rojos con cruz).
     const R = (a, b) => a + Math.random() * (b - a);
@@ -603,17 +609,29 @@
         <p class="pin-err" id="err"></p>
         <button class="pin-btn" id="ok">Iniciar sesión <span aria-hidden="true">→</span></button>
       </div><p class="pin-foot">© 2026 +MARKA. Todos los derechos reservados.</p></div>`;
+    // Mientras se valida la clave y se bajan los datos, la tarjeta queda borrosa y encima corre la animacion +MARKA; despues pasa directo al tablero.
+    const cargando = (on) => {
+      const w = $app.querySelector('.pin-wrap'); if (!w) return;
+      document.body.classList.toggle('pin-carga', on);
+      w.classList.toggle('cargando', on);
+      const ld = w.querySelector('.pin-ld');
+      if (on && !ld) w.insertAdjacentHTML('beforeend', `<div class="pin-ld">${cargador('Cargando, aguarde un momento...')}</div>`);
+      else if (!on && ld) ld.remove();
+    };
+    const abrir = async (pin) => { await siguiente(pin); document.body.classList.remove('login-pin', 'pin-carga'); };
     const entrar = async () => {
+      if (document.body.classList.contains('pin-carga')) return;   // ya esta cargando: ignora toques repetidos
       const pin = document.getElementById('pin').value;
+      cargando(true);
       const ok = await valida(pin);
       if (ok) {
         const rec = document.getElementById('rec').checked;
         (rec ? localStorage : sessionStorage).setItem(clave, pin);
         (rec ? sessionStorage : localStorage).removeItem(clave);
         if (rec) localStorage.setItem(clave + '-ts', String(Date.now())); else localStorage.removeItem(clave + '-ts');
-        document.body.classList.remove('login-pin'); siguiente(pin);
+        await abrir(pin);
       }
-      else if (ok === false) document.getElementById('err').textContent = 'Clave incorrecta';
+      else { cargando(false); if (ok === false) document.getElementById('err').textContent = 'Clave incorrecta'; }
     };
     document.getElementById('ok').onclick = entrar;
     document.getElementById('pin').onkeydown = (e) => { if (e.key === 'Enter') entrar(); };
@@ -627,11 +645,18 @@
 
   // ═══════════ TABLERO ═══════════
   async function vistaTablero(pin) {
-    if (!state.datos) $app.innerHTML = cargador('Cargando, aguarde un momento...');
+    if (!state.datos && !$app.querySelector('.pin-wrap')) $app.innerHTML = cargador('Cargando, aguarde un momento...');   // si sigue la pantalla de clave, la animacion corre sobre ella
     try { state.datos = await S.todasLasFotos(pin); } catch (e) {
-      if (state.datos) { toast(e.message); return pintarTablero(); }
+      if (state.datos) { toast(e.message); restaurarSeccion(); return pintarTablero(); }
       $app.innerHTML = `<div class="wrap wide"><div class="empty">No se pudo leer Drive: ${esc(e.message)}</div></div>`; return; }
+    try { sessionStorage.setItem('tablero-previa', JSON.stringify({ d: state.datos, p: state.pdvs })); } catch (e) { /* sin espacio: al recargar solo se vera la animacion */ }
+    restaurarSeccion();
     pintarTablero();
+  }
+  // Al recargar la pagina, el navegador conserva en el historial en que seccion estaba: se vuelve a ella (Resumen, Evaluacion, Detalle de punto de venta...).
+  function restaurarSeccion() {
+    const t = history.state && history.state.tablero;
+    if (t && !state.restaurado) { state.restaurado = true; hist.n = hist.max = t.n || 0; state.vista = t.vista; state.det = t.det; state.tab.tipo = t.tipo; }
   }
 
   // Historial del tablero: cada cambio de pestaña se guarda para poder volver y avanzar (flechas y boton atras del navegador).
@@ -1089,6 +1114,15 @@
   }
   async function iniciar() {
     const pagina = document.body.dataset.page;
+    // Las miniaturas de Drive a veces fallan (limite de pedidos simultaneos): se reintenta hasta 3 veces, espaciadas, en lugar de dejar el cuadro vacio.
+    document.addEventListener('error', (e) => {
+      const im = e.target;
+      if (!(im instanceof HTMLImageElement) || !/drive\.google\.com\/thumbnail/.test(im.src)) return;
+      const n = +(im.dataset.reint || 0); if (n >= 3) return;
+      im.dataset.reint = String(n + 1);
+      const base = im.src.replace(/&r=\d+$/, '');
+      setTimeout(() => { im.src = base + '&r=' + (n + 1); }, 1500 * (n + 1));
+    }, true);
     // La lista de planogramas tarda: se muestra la ultima conocida de inmediato y se actualiza por detras (la pantalla no la espera).
     const previa = S.remoto ? guardado('cache-planos') : null;
     if (previa) state.planos = previa;
@@ -1096,11 +1130,18 @@
     state.planosP = S.planogramas().then((x) => { state.planos = x; state.planosListo = true; })
       .catch((e) => { state.planosListo = true; if (!previa) toast('Sin conexión con Drive: ' + e.message); });
     const conPdvs = (vista) => async (pin) => {
-      if (pagina === 'tablero' && !state.datos) $app.innerHTML = cargador('Cargando, aguarde un momento...');
-      try { state.pdvs = await S.puntosDeVenta(pin); } catch (e) { state.pdvs = []; }
-      await state.planosP; vista(pin);
+      if (pagina === 'tablero' && !state.datos && !$app.querySelector('.pin-wrap')) $app.innerHTML = cargador('Cargando, aguarde un momento...');
+      try { state.pdvs = await S.puntosDeVenta(pin); } catch (e) { state.pdvs = state.pdvs || []; }   // si falla, se conservan los de la ultima vez
+      await state.planosP; return vista(pin);
     };
-    if (pagina === 'tablero') conPin(conPdvs(vistaTablero), 'tablero');
+    if (pagina === 'tablero') {
+      // Al recargar con la sesion abierta, se pinta de inmediato lo ultimo que se vio (copia de esta pestana) y queda borroso mientras llegan los datos nuevos.
+      try {
+        const c = JSON.parse(sessionStorage.getItem('tablero-previa') || 'null');
+        if (c && c.d && (localStorage.getItem('pin-tablero') || sessionStorage.getItem('pin-tablero'))) { state.datos = c.d; state.pdvs = c.p || []; restaurarSeccion(); state.vistaPrevia = true; pintarTablero(); }
+      } catch (e) { state.datos = null; state.vistaPrevia = false; }
+      conPin(conPdvs(vistaTablero), 'tablero');
+    }
     else if (pagina === 'admin') conPin(conPdvs(vistaPlanogramas), 'admin');
     else { if (state.usuario && retomarVisita()) paso = 'marca'; pintarCampo(); refrescarUsuario(); }
     pintarSync();
