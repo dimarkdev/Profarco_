@@ -700,13 +700,25 @@
     const agrupar = (arr) => {
     const visitas = [];
     [...arr].sort((a, b) => a.ts - b.ts).forEach((x) => {
-      const v = visitas.find((q) => q.pdv === x.pdv && q.marca === x.marca && q.tipo === x.tipo && q.relevador === x.relevador && x.ts - q.fin <= 20 * 60 * 1000);
+      const v = visitas.find((q) => q.pdv === x.pdv && q.marca === x.marca && q.tipo === x.tipo && q.relevador === x.relevador && x.ts - q.fin <= 20 * 1000);   // las fotos de un mismo envio se guardan juntas (milisegundos); dos relevamientos del mismo espacio seguidos NO se mezclan (el mas cercano que vimos: 68 s)
       if (v) { v.fotos.push(x); v.fin = x.ts; v.criterios = [...new Set([...v.criterios, ...(x.criterios || [])])]; }
       else visitas.push({ id: x.id, pdv: x.pdv, marca: x.marca, tipo: x.tipo, relevador: x.relevador, ts: x.ts, fin: x.ts, fotos: [x], criterios: [...(x.criterios || [])] });
     });
+    // Relevamientos seguidos del mismo espacio (mismo relevador, a menos de 20 min uno del otro): cada uno queda aparte pero se marca "1 de 3 · mismo espacio".
+    const cadenas = [], abierta = new Map();
+    visitas.forEach((v) => {   // ya vienen de la mas antigua a la mas nueva
+      const k = [v.pdv, v.marca, v.tipo, v.relevador].join('|'), ch = abierta.get(k);
+      if (ch && v.ts - ch[ch.length - 1].fin <= 20 * 60 * 1000) ch.push(v);
+      else { const nuevo = [v]; abierta.set(k, nuevo); cadenas.push(nuevo); }
+    });
+    cadenas.filter((ch) => ch.length > 1).forEach((ch) => ch.forEach((v, i) => { v.rep = { i: i + 1, n: ch.length, ch }; }));
     visitas.sort((a, b) => b.ts - a.ts);
-    return visitas;
+    // Lo mas nuevo arriba, pero los relevamientos de un mismo espacio van juntos y en orden 1, 2, 3 (el grupo se ubica donde esta su ultimo envio).
+    const orden = [], puestos = new Set();
+    visitas.forEach((v) => { if (puestos.has(v)) return; (v.rep ? v.rep.ch : [v]).forEach((q) => { puestos.add(q); orden.push(q); }); });
+    return orden;
     };
+    const repHtml = (v) => v.rep ? `<span class="rep" title="Mismo punto de venta, marca y espacio relevado más de una vez seguida">Relevamiento ${v.rep.i} de ${v.rep.n} · mismo espacio</span>` : '';
     const V = agrupar(lista);
 
     const INCID = C.CRITERIOS.filter((x) => !x.derivado && (x.tono === 'bad' || x.tono === 'warn')).map((x) => x.id);   // respuestas que cuentan como hallazgo
@@ -924,7 +936,7 @@
     const visitaHtml = (v) => {
       const r = resDe(v), crit = critAplica(v.criterios);
       const resp = C.PREGUNTAS.map((q) => { const o = q.opciones.find((x) => crit.includes(x.id)); return o ? { q, o } : null; }).filter(Boolean);
-      return `<div class="vis"><div class="vis-h"><div><b>${esc(v.marca || '')} · ${esc(v.tipo)}</b><small>${fmtFecha(v.ts)}</small></div></div>
+      return `<div class="vis"><div class="vis-h"><div><b>${esc(v.marca || '')} · ${esc(v.tipo)}</b><small>${fmtFecha(v.ts)}</small>${repHtml(v)}</div></div>
         <div class="chips">${resp.map((q) => `<span class="chip ${q.o.tono === 'bad' ? 'red' : q.o.tono === 'warn' ? 'org' : 'grn'}"><b>${esc(q.q.corto)}:</b> ${esc(q.o.texto)}</span>`).join('')}</div>${obsDe(v) ? `<p class="muted" style="margin:8px 0 0"><b>Observación:</b> ${esc(obsDe(v))}</p>` : ''}</div>`;
     };
     const secDet = `<section><h1>Detalle de punto de venta</h1><p class="sub">Resultados, fotos y evidencias de cada visita.</p>
@@ -937,14 +949,14 @@
           <section class="panel"><div class="p-head"><i class="k-ico ok">${svg('cmp', 18)}</i><div><h2>Relevamientos · ${esc(detNombre)}</h2></div></div>
             ${VD.length ? VD.map(visitaHtml).join('') : '<div class="empty">Este punto de venta todavía no tiene relevamientos.</div>'}</section>
           <section class="panel" id="s-gal"><div class="p-head"><i class="k-ico mut">${svg('img', 18)}</i><div><h2>Fotos y evidencias</h2><p>${VD.length} relevamiento${VD.length === 1 ? '' : 's'} · ${detFotos.length} foto${detFotos.length === 1 ? '' : 's'}. Toca uno para verlo en grande junto a su planograma.</p></div></div>
-            <div class="galeria">${VD.length ? VD.map((x) => `<button class="g-item" data-g="${esc(x.id)}">${x.fotos.length > 1 ? `<span class="n-fotos">${x.fotos.length} fotos</span>` : ''}<img src="${esc(x.fotos[0].thumb || x.fotos[0].url)}" loading="lazy" alt=""><div><b>${esc(x.marca || '')} · ${esc(x.tipo)}</b><small class="num">${fmtFecha(x.ts)}${x.fotos.some((p) => p.pendiente) ? ' · por subir' : ''}</small><div class="tags">${tags(x)}</div></div></button>`).join('') : '<div class="empty">Aún no hay fotos</div>'}</div></section>`;
+            <div class="galeria">${VD.length ? VD.map((x) => `<button class="g-item" data-g="${esc(x.id)}">${x.fotos.length > 1 ? `<span class="n-fotos">${x.fotos.length} fotos</span>` : ''}<img src="${esc(x.fotos[0].thumb || x.fotos[0].url)}" loading="lazy" alt=""><div><b>${esc(x.marca || '')} · ${esc(x.tipo)}</b><small class="num">${fmtFecha(x.ts)}${x.fotos.some((p) => p.pendiente) ? ' · por subir' : ''}</small>${repHtml(x)}<div class="tags">${tags(x)}</div></div></button>`).join('') : '<div class="empty">Aún no hay fotos</div>'}</div></section>`;
 
     // ── Evidencias: fotos por local, marca y espacio ──
     const filtrosEv = `<div class="filt">${buscador}${multiPdv()}${select('marca', 'Marca', opt('marca'))}${select('tipo', 'Tipo de espacio', C.TIPOS.map((t) => t.nombre))}
               <label class="f-sel"><span>Desde</span><input type="date" data-f="desde" value="${f.desde}"></label><label class="f-sel"><span>Hasta</span><input type="date" data-f="hasta" value="${f.hasta}"></label></div>`;
     const secEv = `<section><h1>Evidencias</h1><p class="sub">Fotos relevadas. Filtrá por local, marca y espacio.</p>${filtrosEv}</section>
           <section class="panel" id="s-gal"><div class="p-head"><i class="k-ico mut">${svg('img', 18)}</i><div><h2>Fotos</h2><p>${V.length} relevamiento${V.length === 1 ? '' : 's'} · ${lista.length} foto${lista.length === 1 ? '' : 's'}. Toca uno para verlo junto a su planograma.</p></div></div>
-            <div class="galeria">${V.length ? V.map((x) => `<button class="g-item" data-g="${esc(x.id)}">${x.fotos.length > 1 ? `<span class="n-fotos">${x.fotos.length} fotos</span>` : ''}<img src="${esc(x.fotos[0].thumb || x.fotos[0].url)}" loading="lazy" alt=""><div><b>${esc(x.pdv)}</b><small>${esc(x.marca || '')} · ${esc(x.tipo)}</small><small class="num">${fmtFecha(x.ts)}${x.fotos.some((p) => p.pendiente) ? ' · por subir' : ''}</small><div class="tags">${tags(x)}</div></div></button>`).join('') : '<div class="empty">No hay fotos con estos filtros</div>'}</div></section>`;
+            <div class="galeria">${V.length ? V.map((x) => `<button class="g-item" data-g="${esc(x.id)}">${x.fotos.length > 1 ? `<span class="n-fotos">${x.fotos.length} fotos</span>` : ''}<img src="${esc(x.fotos[0].thumb || x.fotos[0].url)}" loading="lazy" alt=""><div><b>${esc(x.pdv)}</b><small>${esc(x.marca || '')} · ${esc(x.tipo)}</small><small class="num">${fmtFecha(x.ts)}${x.fotos.some((p) => p.pendiente) ? ' · por subir' : ''}</small>${repHtml(x)}<div class="tags">${tags(x)}</div></div></button>`).join('') : '<div class="empty">No hay fotos con estos filtros</div>'}</div></section>`;
 
     // ── Espacios: resultado por tipo de espacio ──
     const espDe = C.TIPOS.map((t) => { const it = V.filter((v) => mismoEsp(v.tipo, t.nombre)); const rc = it.filter((v) => resDe(v)).length;
@@ -1107,7 +1119,7 @@
       const r = await S.login(state.usuario.ci);
       state.usuario = { ci: state.usuario.ci, nombre: r.nombre, pdvs: r.pdvs };
       localStorage.setItem('usuario', JSON.stringify(state.usuario));
-      if (paso === 'pdv') pintarCampo();
+      if (paso === 'pdv' || paso === 'marca' || paso === 'tipos') pintarCampo();   // en estas pantallas es seguro volver a pintar con los espacios recien recibidos
     } catch (e) {
       if (/no encontrada/i.test(e.message)) { localStorage.removeItem('usuario'); state.usuario = null; pintarCampo(); }
     }

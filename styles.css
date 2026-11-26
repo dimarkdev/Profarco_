@@ -749,3 +749,6 @@ button.k-link:focus-visible { outline: 2px solid #3cb3a8; outline-offset: 2px; }
 .fm-o:hover { background: #f3f5f4; }
 .fm-o input { margin-top: 2px; flex: none; }
 .fm-o[hidden] { display: none !important; }
+
+/* Relevamientos seguidos del mismo espacio */
+.rep { display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 999px; background: #eaf2fb; color: #1d4f8c; font-size: 11.5px; font-weight: 600; }
